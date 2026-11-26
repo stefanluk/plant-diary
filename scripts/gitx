@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run any git command with the token from .env (GITHUB_USER / PUSH_TOKEN) for github.com.
+# Usage: scripts/gitx push -u origin main
+# The explicit -c flags also override credential helpers injected by other tools (e.g. a logged-in gh account).
+cd "$(dirname "$0")/.." || exit 1
+exec git \
+  -c credential.https://github.com.helper= \
+  -c credential.https://github.com.helper='!sh scripts/git-credential-env.sh' \
+  "$@"

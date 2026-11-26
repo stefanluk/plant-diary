@@ -10,6 +10,12 @@ npm run dev          # http://localhost:8099, data in ./data
 npm test
 ```
 
+## Pushen met token uit `.env`
+
+1. `cp .env.example .env` en vul `PUSH_TOKEN` in (fine-grained token van `stefanluk`, alleen deze repo, Contents: Read and write). `.env` staat in `.gitignore`.
+2. Gebruik `scripts/gitx` in plaats van `git` voor commando's die de remote raken: `scripts/gitx push`, `scripts/gitx pull`. Dit gebruikt het token uit `.env` en negeert andere ingelogde accounts (bijv. `gh`).
+3. Gewone `git` in een eigen terminal werkt ook: de repo heeft een lokale credential helper (`scripts/git-credential-env.sh`) voor github.com. Na een verse clone: `git config --local credential.https://github.com.helper '!sh scripts/git-credential-env.sh'`.
+
 Env: `DATA_DIR`, `PORT`, `SEED` (starterplanten bij lege database, standaard `true`), `MQTT_URL`/`MQTT_USER`/`MQTT_PASSWORD`, `NOTIFY_SERVICE` (bijv. `notify.mobile_app_pixel`), `NOTIFY_HOUR`.
 
 ## Installeren in Home Assistant
