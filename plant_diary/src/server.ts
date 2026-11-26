@@ -10,6 +10,9 @@ import { openDb } from './db.js';
 import { HttpError, PlantService } from './service.js';
 import { HaBridge } from './ha.js';
 import { seedIfEmpty } from './seed.js';
+import { syncCatalog } from './catalog.js';
+import { Perenual } from './perenual.js';
+import { LIGHT_LEVELS, SOILS } from './options.js';
 import { toISODate } from './schedule.js';
 
 const DATA_DIR = process.env.DATA_DIR ?? './data';
@@ -19,7 +22,7 @@ const PUBLIC_DIR = join(here, '..', 'public');
 const PHOTO_DIR = join(DATA_DIR, 'photos');
 const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic']);
 
-export function buildApp(svc: PlantService, ha?: HaBridge) {
+export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual) {
   const app = Fastify({ logger: true });
   mkdirSync(PHOTO_DIR, { recursive: true });
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024 } });
@@ -67,7 +70,18 @@ export function buildApp(svc: PlantService, ha?: HaBridge) {
     return reply.code(204).send();
   });
 
+  app.get('/api/config', async () => ({ perenual: !!online?.enabled, light_levels: LIGHT_LEVELS, soils: SOILS }));
   app.get('/api/species', async () => svc.listSpecies());
+  app.get('/api/species/search', async (req) => svc.searchSpecies(String((req.query as any).q ?? '')));
+  app.post('/api/species/search-online', async (req) => {
+    if (!online) throw new HttpError(503, 'Online zoeken niet beschikbaar');
+    return online.search(String((req.body as any)?.q ?? ''));
+  });
+  app.post('/api/species/from-online', async (req, reply) => {
+    if (!online) throw new HttpError(503, 'Online zoeken niet beschikbaar');
+    return reply.code(201).send(await online.importSpecies(String((req.body as any)?.external_id ?? '')));
+  });
+  app.get('/api/species/:id', async (req) => svc.getSpecies(id(req)));
   app.post('/api/species', async (req, reply) => reply.code(201).send(svc.upsertSpecies(req.body as any)));
   app.patch('/api/species/:id', async (req) => refresh(svc.upsertSpecies(req.body as any, id(req))));
   app.get('/api/due', async () => svc.dueToday());
@@ -77,6 +91,8 @@ export function buildApp(svc: PlantService, ha?: HaBridge) {
 async function main() {
   const db = openDb(join(DATA_DIR, 'plants.db'));
   const svc = new PlantService(db);
+  console.log('Catalog sync', syncCatalog(db));
+  const online = new Perenual(db, svc, process.env.PERENUAL_API_KEY || undefined);
   if ((process.env.SEED ?? 'true') === 'true' && seedIfEmpty(db, svc)) console.log('Seeded starter plants');
 
   const sup = process.env.SUPERVISOR_TOKEN;
@@ -101,7 +117,7 @@ async function main() {
     if (now.getHours() >= hour) void ha.notifyDue(toISODate(now));
   }, 15 * 60_000);
 
-  await buildApp(svc, ha).listen({ port: PORT, host: '0.0.0.0' });
+  await buildApp(svc, ha, online).listen({ port: PORT, host: '0.0.0.0' });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) void main();

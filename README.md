@@ -37,10 +37,16 @@ Env: `DATA_DIR`, `PORT`, `SEED` (starterplanten bij lege database, standaard `tr
 
 Volgende water = laatste water + interval. Interval: plantoverschrijving > soort (zomer apr–sep, winter okt–mrt). Een handmatig gezette volgende datum geldt tot de plant weer water krijgt. Met een datum in het verleden loggen verschuift "laatst water" niet terug.
 
+## Soorten (0.3.0)
+
+- Bij "+ Plant" zoek je lokaal (Latijn/NL/EN/synoniemen, max. 6 suggesties) in een startcatalogus van ± 100 kamerplanten. De catalogus is uit algemene kennis samengesteld en staat als **concept** (niet gecontroleerd); controleer en pas aan via "Bewerk soort" en vink "gecontroleerd" aan. Bewerkte soorten worden nooit overschreven door een catalogusupdate.
+- "Zoek online" gebruikt Perenual (optie `perenual_api_key`, gratis tier: 100 calls/dag, alleen soorten met id ≤ 3000). Alleen bij een klik, resultaten worden gecachet en lokaal opgeslagen.
+- Vaste opties: licht (volledige schaduw, halfschaduw, indirect licht, vol zonlicht) en grond (cactus/succulent, doorlatend, standaard, vochtig/humusrijk, orchideeënbast). Staat een plant buiten het lichtbereik van de soort, dan volgt een waarschuwing.
+
 ## API
 
-`GET/POST /api/plants`, `GET/PATCH /api/plants/:id`, `POST /api/plants/:id/logs` (JSON of multipart met `photo`), `DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/due`.
+`GET/POST /api/plants`, `GET/PATCH /api/plants/:id`, `POST /api/plants/:id/logs` (JSON of multipart met `photo`), `DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/species/search?q=`, `POST /api/species/search-online` en `/api/species/from-online` (Perenual), `GET /api/config`, `GET /api/due`.
 
 ## Later
 
-Bodemvochtsensoren, meerdere gebruikers (HA-gebruiker uit ingress-headers), optionele plantendatabase-lookup.
+Bodemvochtsensoren, meerdere gebruikers (HA-gebruiker uit ingress-headers).

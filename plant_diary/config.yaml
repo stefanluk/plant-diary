@@ -1,5 +1,5 @@
 name: Plantendagboek
-version: "0.2.0"
+version: "0.3.0"
 slug: plant_diary
 description: Dagboek en waterschema voor kamerplanten
 arch: [amd64, aarch64]
@@ -18,7 +18,9 @@ options:
   notify_service: "notify.mobile_app_fairphone_6"
   notify_hour: 9
   seed: true
+  perenual_api_key: ""
 schema:
   notify_service: str?
   notify_hour: int(0,23)
   seed: bool
+  perenual_api_key: str?

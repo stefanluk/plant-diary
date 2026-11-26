@@ -1,16 +1,40 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { LOG_TYPES, OUTCOMES, type Row } from './db.js';
+import { LIGHT_LEVELS, SOILS, lightStatus } from './options.js';
 import { daysOverdue, nextWater, toISODate } from './schedule.js';
 
 const PLANT_FIELDS = [
-  'name', 'species_id', 'room', 'light', 'location_note', 'acquired', 'soil', 'pot',
-  'toxic_cat', 'toxic_child', 'water_interval_override', 'last_watered',
+  'name', 'species_id', 'room', 'light', 'light_level', 'location_note', 'acquired', 'soil', 'pot',
+  'toxic', 'water_interval_override', 'last_watered',
   'next_water_override', 'last_fed', 'last_repotted',
 ] as const;
 
 const SPECIES_FIELDS = [
-  'name', 'water_summer_days', 'water_winter_days', 'feed_days', 'toxic_cat', 'toxic_child',
+  'name', 'latin_name', 'name_nl', 'name_en', 'synonyms', 'water_summer_days', 'water_winter_days',
+  'feed_days', 'light_min', 'light_max', 'soil', 'toxic', 'feed_tip', 'repot_tip', 'prune_tip',
+  'description', 'verified', 'source', 'external_id',
 ] as const;
+
+function validate(data: Row): void {
+  for (const f of ['light_level', 'light_min', 'light_max'])
+    if (data[f] != null && !(LIGHT_LEVELS as readonly string[]).includes(data[f]))
+      throw new HttpError(400, `${f} moet een van ${LIGHT_LEVELS.join(', ')} zijn`);
+  if (data.soil != null && !(SOILS as readonly string[]).includes(data.soil))
+    throw new HttpError(400, `soil moet een van ${SOILS.join(', ')} zijn`);
+  for (const f of ['toxic', 'verified']) if (f in data && data[f] != null) data[f] = data[f] ? 1 : 0;
+}
+
+const normalize = (t: string) =>
+  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+function uniqueGuard<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err: any) {
+    if (/UNIQUE/i.test(String(err?.message))) throw new HttpError(409, 'Er bestaat al een soort met die naam');
+    throw err;
+  }
+}
 
 const pick = (src: Row, fields: readonly string[]) =>
   Object.fromEntries(fields.filter((f) => f in src).map((f) => [f, src[f] === '' ? null : src[f]]));
@@ -38,15 +62,18 @@ export class PlantService {
     );
     return {
       ...r,
-      toxic_cat: r.toxic_cat ?? r.species_toxic_cat ?? 0,
-      toxic_child: r.toxic_child ?? r.species_toxic_child ?? 0,
+      toxic_own: r.toxic,
+      toxic: r.toxic ?? r.species_toxic ?? 0,
+      soil_effective: r.soil ?? r.species_soil ?? null,
+      light_status: lightStatus(r.light_level, r.light_min, r.light_max),
       next_water: next,
       days_overdue: daysOverdue(next, today),
     };
   }
 
-  private plantSelect = `SELECT p.*, s.name AS species_name, s.water_summer_days, s.water_winter_days,
-    s.feed_days, s.toxic_cat AS species_toxic_cat, s.toxic_child AS species_toxic_child
+  private plantSelect = `SELECT p.*, s.name AS species_name, s.latin_name, s.name_nl, s.name_en,
+    s.water_summer_days, s.water_winter_days, s.feed_days, s.light_min, s.light_max,
+    s.toxic AS species_toxic, s.soil AS species_soil
     FROM plants p LEFT JOIN species s ON s.id = p.species_id`;
 
   listPlants(): Row[] {
@@ -57,12 +84,14 @@ export class PlantService {
   getPlant(id: number): Row {
     const r = this.db.prepare(`${this.plantSelect} WHERE p.id = ?`).get(id);
     if (!r) throw new HttpError(404, 'Plant niet gevonden');
-    return { ...this.decorate(r), logs: this.listLogs(id) };
+    const species = r.species_id ? this.db.prepare('SELECT * FROM species WHERE id = ?').get(r.species_id) : null;
+    return { ...this.decorate(r), species, logs: this.listLogs(id) };
   }
 
   createPlant(body: Row): Row {
     if (!body.name) throw new HttpError(400, 'name is verplicht');
     const data = pick(body, PLANT_FIELDS);
+    validate(data);
     const cols = Object.keys(data);
     const res = this.db
       .prepare(`INSERT INTO plants (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
@@ -73,6 +102,7 @@ export class PlantService {
   updatePlant(id: number, body: Row): Row {
     this.getPlant(id);
     const data = pick(body, PLANT_FIELDS);
+    validate(data);
     if ('archived' in body) (data as Row).archived = body.archived ? 1 : 0;
     const cols = Object.keys(data);
     if (cols.length) {
@@ -87,21 +117,62 @@ export class PlantService {
     return this.db.prepare('SELECT * FROM species ORDER BY name').all();
   }
 
+  getSpecies(id: number): Row {
+    const r = this.db.prepare('SELECT * FROM species WHERE id = ?').get(id);
+    if (!r) throw new HttpError(404, 'Soort niet gevonden');
+    return r;
+  }
+
   upsertSpecies(body: Row, id?: number): Row {
     if (!id && !body.name) throw new HttpError(400, 'name is verplicht');
-    const data = pick(body, SPECIES_FIELDS);
-    const cols = Object.keys(data);
+    const data = pick(body, SPECIES_FIELDS) as Row;
+    validate(data);
     if (id) {
-      if (cols.length)
+      this.getSpecies(id);
+      const cols = Object.keys(data);
+      // Marks the entry as customised so a catalog refresh never overwrites it.
+      uniqueGuard(() =>
         this.db
-          .prepare(`UPDATE species SET ${cols.map((c) => `${c} = ?`).join(',')} WHERE id = ?`)
-          .run(...(Object.values(data) as any[]), id);
-      return this.db.prepare('SELECT * FROM species WHERE id = ?').get(id)!;
+          .prepare(`UPDATE species SET ${[...cols.map((c) => `${c} = ?`), 'user_edited = 1'].join(',')} WHERE id = ?`)
+          .run(...(Object.values(data) as any[]), id),
+      );
+      return this.getSpecies(id);
     }
-    const res = this.db
-      .prepare(`INSERT INTO species (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
-      .run(...(Object.values(data) as any[]));
-    return this.db.prepare('SELECT * FROM species WHERE id = ?').get(Number(res.lastInsertRowid))!;
+    const cols = Object.keys(data);
+    const res = uniqueGuard(() =>
+      this.db
+        .prepare(`INSERT INTO species (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
+        .run(...(Object.values(data) as any[])),
+    );
+    return this.getSpecies(Number(res.lastInsertRowid));
+  }
+
+  /** Local ranked search; every query token must match somewhere in the species names. */
+  searchSpecies(q: string, limit = 6): Row[] {
+    const tokens = normalize(q).split(' ').filter(Boolean);
+    if (!tokens.length || normalize(q).length < 2) return [];
+    const scored: { score: number; row: Row }[] = [];
+    for (const row of this.listSpecies()) {
+      const fields = [row.name, row.latin_name, row.name_nl, row.name_en, ...String(row.synonyms ?? '').split(',')]
+        .filter(Boolean)
+        .map((f) => normalize(String(f)));
+      let total = 0;
+      for (const t of tokens) {
+        let best = Infinity;
+        for (const f of fields) {
+          const words = f.split(' ');
+          const sc = f === t ? 0 : f.startsWith(t) ? 1 : words.some((w) => w.startsWith(t)) ? 2 : f.includes(t) ? 3 : Infinity;
+          best = Math.min(best, sc);
+        }
+        total += best;
+      }
+      if (Number.isFinite(total)) scored.push({ score: total, row });
+    }
+    scored.sort((a, b) => a.score - b.score || a.row.id - b.row.id);
+    return scored.slice(0, limit).map(({ row }) => ({
+      id: row.id, name: row.name, latin_name: row.latin_name, name_nl: row.name_nl, name_en: row.name_en,
+      source: row.source, verified: row.verified,
+    }));
   }
 
   listLogs(plantId: number): Row[] {

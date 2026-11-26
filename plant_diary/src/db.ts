@@ -43,13 +43,68 @@ CREATE TABLE IF NOT EXISTS logs (
   photo TEXT
 );
 CREATE INDEX IF NOT EXISTS logs_plant ON logs(plant_id, date);
+CREATE TABLE IF NOT EXISTS api_usage (
+  day TEXT NOT NULL,
+  service TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, service)
+);
+CREATE TABLE IF NOT EXISTS online_cache (
+  key TEXT PRIMARY KEY,
+  json TEXT NOT NULL,
+  fetched TEXT NOT NULL
+);
 `;
+
+// Columns added after the first release; applied additively so existing data stays intact.
+const SPECIES_COLUMNS: Record<string, string> = {
+  latin_name: 'TEXT',
+  name_nl: 'TEXT',
+  name_en: 'TEXT',
+  synonyms: 'TEXT',
+  light_min: 'TEXT',
+  light_max: 'TEXT',
+  soil: 'TEXT',
+  repot_tip: 'TEXT',
+  prune_tip: 'TEXT',
+  feed_tip: 'TEXT',
+  description: 'TEXT',
+  toxic: 'INTEGER',
+  source: "TEXT NOT NULL DEFAULT 'custom'",
+  verified: 'INTEGER NOT NULL DEFAULT 0',
+  external_id: 'TEXT',
+  user_edited: 'INTEGER NOT NULL DEFAULT 0',
+};
+const PLANT_COLUMNS: Record<string, string> = { light_level: 'TEXT', toxic: 'INTEGER' };
+
+/** Returns the names of the columns that were newly added. */
+function addColumns(db: DatabaseSync, table: string, cols: Record<string, string>): string[] {
+  const have = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as Row[]).map((r) => r.name));
+  const added: string[] = [];
+  for (const [name, def] of Object.entries(cols)) {
+    if (have.has(name)) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+    added.push(name);
+  }
+  return added;
+}
+
+function migrate(db: DatabaseSync): void {
+  // The single "toxic" flag replaces the separate cat/child flags; carry the old values over once.
+  if (addColumns(db, 'species', SPECIES_COLUMNS).includes('toxic'))
+    db.exec('UPDATE species SET toxic = MAX(toxic_cat, toxic_child)');
+  if (addColumns(db, 'plants', PLANT_COLUMNS).includes('toxic'))
+    db.exec(`UPDATE plants SET toxic = MAX(COALESCE(toxic_cat, 0), COALESCE(toxic_child, 0))
+             WHERE toxic_cat IS NOT NULL OR toxic_child IS NOT NULL`);
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS species_external ON species(external_id) WHERE external_id IS NOT NULL');
+}
 
 export function openDb(path: string): DatabaseSync {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

@@ -94,8 +94,7 @@ export class HaBridge {
         days_overdue: p.days_overdue,
         last_watered: p.last_watered,
         room: p.room,
-        toxic_cat: !!p.toxic_cat,
-        toxic_child: !!p.toxic_child,
+        toxic: !!p.toxic,
       });
     }
     const due = this.svc.dueToday();
