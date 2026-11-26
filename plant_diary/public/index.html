@@ -110,7 +110,7 @@ function infoBlock(p) {
   if (!s) return '<div class="card"><h3>Soort-info</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
   const tip = (label, v) => `<div><span class="muted">${label}</span><br>${v ? esc(v) : '<span class="muted">nog niet ingevuld</span>'}</div>`;
   const water = s.water_summer_days ? `elke ${s.water_summer_days} dagen (zomer) · ${s.water_winter_days ?? s.water_summer_days} dagen (winter)` : '';
-  const mismatch = p.light_status
+  const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
     ? `<div class="warnbox">${p.light_status === 'too_bright' ? '☀️ Staat te licht' : '🌑 Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
   return `<div class="card info"><div class="row"><h3>${esc(s.latin_name || s.name)}${s.name_nl ? ' · ' + esc(s.name_nl) : ''}</h3>
       <span class="badge ${s.verified ? '' : 'warn'}">${s.verified ? 'gecontroleerd' : 'concept'}</span></div>

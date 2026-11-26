@@ -1,5 +1,5 @@
 name: Plantendagboek
-version: "0.3.0"
+version: "0.3.1"
 slug: plant_diary
 description: Dagboek en waterschema voor kamerplanten
 arch: [amd64, aarch64]
