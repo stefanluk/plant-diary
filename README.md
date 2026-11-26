@@ -5,6 +5,7 @@ Home Assistant add-on (Node/TypeScript, SQLite) om kamerplanten bij te houden: w
 ## Lokaal draaien
 
 ```bash
+cd plant_diary
 npm install
 npm run dev          # http://localhost:8099, data in ./data
 npm test
@@ -20,7 +21,7 @@ Env: `DATA_DIR`, `PORT`, `SEED` (starterplanten bij lege database, standaard `tr
 
 ## Installeren in Home Assistant
 
-1. Kopieer deze repo naar `/addons/plant_diary` op je HA (Samba of SSH add-on), ga naar Instellingen → Add-ons → Add-on store → ⋮ → Controleren op updates en kies onder *Lokale add-ons* "Plantendagboek".
+1. Add-on store → ⋮ → Repositories → voeg `https://github.com/stefanluk/plant-diary` toe, installeer "Plantendagboek".
 2. Zet in de add-on-opties `notify_service` op je telefoon, bijv. `notify.mobile_app_<telefoon>`.
 3. Installeer de Mosquitto-add-on en de MQTT-integratie voor sensoren. De add-on pakt de broker automatisch op.
 4. Start en open via "Plantendagboek" in de zijbalk (ingress).
