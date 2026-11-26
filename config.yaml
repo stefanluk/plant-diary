@@ -15,7 +15,7 @@ map:
 services:
   - mqtt:want
 options:
-  notify_service: ""
+  notify_service: "notify.mobile_app_fairphone_6"
   notify_hour: 9
   seed: true
 schema:
