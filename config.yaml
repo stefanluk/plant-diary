@@ -1,0 +1,24 @@
+name: Plantendagboek
+version: "0.1.0"
+slug: plant_diary
+description: Dagboek en waterschema voor kamerplanten
+arch: [amd64, aarch64]
+startup: application
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:flower
+homeassistant_api: true
+map:
+  - addon_config:rw
+services:
+  - mqtt:want
+options:
+  notify_service: ""
+  notify_hour: 9
+  seed: true
+schema:
+  notify_service: str?
+  notify_hour: int(0,23)
+  seed: bool

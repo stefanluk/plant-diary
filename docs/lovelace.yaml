@@ -1,0 +1,17 @@
+# Voorbeeld-dashboardkaart. Entity-ids hangen af van je plantnamen; pas aan na het installeren.
+type: vertical-stack
+cards:
+  - type: markdown
+    content: >
+      ## 🪴 Planten
+      {% set n = states('sensor.planten_water_nodig') | int(0) %}
+      {% if n > 0 %}**{{ n }} planten hebben water nodig:**
+      {{ state_attr('sensor.planten_water_nodig', 'plants') | join(', ') }}
+      {% else %}Alles is verzorgd 🎉{% endif %}
+  - type: entities
+    title: Volgende water
+    entities:
+      - sensor.lepelplant_volgende_water
+      - button.lepelplant_water_gegeven
+      - sensor.ficus_elastica_volgende_water
+      - button.ficus_elastica_water_gegeven

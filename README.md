@@ -1,0 +1,39 @@
+# Plant Diary (Plantendagboek)
+
+Home Assistant add-on (Node/TypeScript, SQLite) om kamerplanten bij te houden: waterschema per soort (zomer/winter automatisch, per plant overschrijfbaar), dagboek met water/voeding/verpotten/snoeien/notities/foto's en een "werkt/werkt niet"-vlag, giftig-labels voor kat en kind, push-herinneringen en sensoren in HA.
+
+## Lokaal draaien
+
+```bash
+npm install
+npm run dev          # http://localhost:8099, data in ./data
+npm test
+```
+
+Env: `DATA_DIR`, `PORT`, `SEED` (starterplanten bij lege database, standaard `true`), `MQTT_URL`/`MQTT_USER`/`MQTT_PASSWORD`, `NOTIFY_SERVICE` (bijv. `notify.mobile_app_pixel`), `NOTIFY_HOUR`.
+
+## Installeren in Home Assistant
+
+1. Kopieer deze repo naar `/addons/plant_diary` op je HA (Samba of SSH add-on), ga naar Instellingen → Add-ons → Add-on store → ⋮ → Controleren op updates en kies onder *Lokale add-ons* "Plantendagboek".
+2. Zet in de add-on-opties `notify_service` op je telefoon, bijv. `notify.mobile_app_<telefoon>`.
+3. Installeer de Mosquitto-add-on en de MQTT-integratie voor sensoren. De add-on pakt de broker automatisch op.
+4. Start en open via "Plantendagboek" in de zijbalk (ingress).
+
+## In HA
+
+- Per plant: `sensor.<plant>_volgende_water` (datum) en `button.<plant>_water_gegeven`.
+- `sensor.planten_water_nodig`: aantal planten dat water nodig heeft, met lijst in attributen.
+- Push: dagelijks vanaf `notify_hour` per plant die water nodig heeft, met actie **Water gegeven**. Die zet "laatst water" op vandaag en herberekent de volgende datum.
+- Dashboard: zie `docs/lovelace.yaml`.
+
+## Schema
+
+Volgende water = laatste water + interval. Interval: plantoverschrijving > soort (zomer apr–sep, winter okt–mrt). Een handmatig gezette volgende datum geldt tot de plant weer water krijgt. Met een datum in het verleden loggen verschuift "laatst water" niet terug.
+
+## API
+
+`GET/POST /api/plants`, `GET/PATCH /api/plants/:id`, `POST /api/plants/:id/logs` (JSON of multipart met `photo`), `DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/due`.
+
+## Later
+
+Bodemvochtsensoren, meerdere gebruikers (HA-gebruiker uit ingress-headers), optionele plantendatabase-lookup.
