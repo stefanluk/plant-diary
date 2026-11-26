@@ -55,6 +55,15 @@ export class HaBridge {
     }
   }
 
+  /** Remove a plant's entities from HA by clearing its retained discovery configs. */
+  removePlant(plantId: number): void {
+    if (!this.mqtt?.connected) return;
+    const base = `${PREFIX}/${plantId}`;
+    for (const t of [`homeassistant/sensor/${PREFIX}_${plantId}_next/config`, `homeassistant/button/${PREFIX}_${plantId}_water/config`, `${base}/state`])
+      this.mqtt.publish(t, '', { retain: true });
+    this.publish();
+  }
+
   /** Publish MQTT discovery configs + state for every plant, plus a summary sensor. */
   publish(): void {
     if (!this.mqtt?.connected) return;

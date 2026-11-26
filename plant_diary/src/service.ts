@@ -127,6 +127,11 @@ export class PlantService {
     return this.getPlant(plantId);
   }
 
+  deletePlant(id: number): void {
+    this.getPlant(id);
+    this.db.prepare('DELETE FROM plants WHERE id = ?').run(id);
+  }
+
   deleteLog(plantId: number, logId: number): void {
     this.db.prepare('DELETE FROM logs WHERE id = ? AND plant_id = ?').run(logId, plantId);
   }

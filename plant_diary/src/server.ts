@@ -39,6 +39,12 @@ export function buildApp(svc: PlantService, ha?: HaBridge) {
   app.get('/api/plants/:id', async (req) => svc.getPlant(id(req)));
   app.patch('/api/plants/:id', async (req) => refresh(svc.updatePlant(id(req), req.body as any)));
 
+  app.delete('/api/plants/:id', async (req, reply) => {
+    svc.deletePlant(id(req));
+    ha?.removePlant(id(req));
+    return reply.code(204).send();
+  });
+
   app.post('/api/plants/:id/logs', async (req, reply) => {
     let body: Record<string, any>;
     if (req.isMultipart()) {

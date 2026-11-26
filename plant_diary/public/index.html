@@ -5,23 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plantendagboek</title>
 <style>
-  :root { --g:#2e7d32; --bg:#f4f6f1; --c:#fff; --r:#c62828; }
+  :root { --primary:rgb(122,162,190); --bg:rgb(2,6,11); --text:rgba(234,235,238,.98); --text2:rgba(234,235,238,.7);
+    --card:rgba(255,255,255,.06); --border:rgba(234,235,238,.22); --divider:rgba(90,111,128,.28);
+    --ok:rgb(118,214,152); --warn:rgb(255,219,117); --err:rgb(234,114,135); --r:18px; }
   * { box-sizing: border-box; }
-  body { margin:0; font:16px system-ui,sans-serif; background:var(--bg); color:#222; }
-  header { background:var(--g); color:#fff; padding:12px 16px; display:flex; gap:12px; align-items:center; position:sticky; top:0; z-index:2; }
-  header h1 { font-size:18px; margin:0; flex:1; }
-  button { font:inherit; padding:8px 12px; border:0; border-radius:8px; background:var(--g); color:#fff; }
-  button.sec { background:#e0e6da; color:#222; }
+  body { margin:0; font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--text);
+    background:radial-gradient(1200px 700px at 15% -10%,rgba(122,162,190,.22),transparent 60%),radial-gradient(900px 600px at 100% 0,rgba(118,214,152,.10),transparent 55%),var(--bg) fixed; min-height:100vh; }
+  header { background:rgba(2,6,11,.55); backdrop-filter:blur(8px) saturate(1.1); border-bottom:1px solid var(--divider); padding:12px 16px; display:flex; gap:12px; align-items:center; position:sticky; top:0; z-index:2; }
+  header h1 { font-size:18px; font-weight:500; margin:0; flex:1; }
+  button { font:inherit; padding:8px 14px; border:0; border-radius:12px; background:var(--primary); color:#02060b; font-weight:500; cursor:pointer; }
+  button.sec { background:rgba(234,235,238,.12); color:var(--text); }
+  button.danger { background:rgba(234,114,135,.16); color:var(--err); border:1px solid rgba(234,114,135,.5); }
+  button.danger.armed { background:var(--err); color:#02060b; }
   main { padding:12px; max-width:720px; margin:auto; }
-  .card { background:var(--c); border-radius:12px; padding:12px; margin-bottom:10px; box-shadow:0 1px 2px #0002; }
+  .card { background:var(--card); backdrop-filter:blur(10px) saturate(1.25); border:.5px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:12px;
+    box-shadow:3px 3px .5px -3.5px rgba(255,255,255,.3) inset,-2px -2px .5px -2px rgba(255,255,255,.2) inset,0 4px 16px rgba(0,0,0,.35); }
+  .card[data-id] { cursor:pointer; }
+  h3 { margin:0 0 10px; font-weight:500; font-size:16px; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
-  .badge { font-size:12px; padding:2px 8px; border-radius:99px; background:#e0e6da; margin-left:4px; }
-  .badge.warn { background:#ffe0b2; } .badge.over { background:var(--r); color:#fff; }
-  .muted { color:#666; font-size:14px; }
-  input, select, textarea { width:100%; font:inherit; padding:8px; margin:4px 0 10px; border:1px solid #ccc; border-radius:8px; }
-  label { font-size:13px; color:#555; }
-  img.photo { max-width:100%; border-radius:8px; margin-top:6px; }
-  .log { border-top:1px solid #eee; padding:8px 0; }
+  .badge { font-size:12px; padding:2px 9px; border-radius:99px; background:rgba(234,235,238,.12); margin-left:4px; white-space:nowrap; }
+  .badge.warn { background:rgba(255,219,117,.18); color:var(--warn); } .badge.over { background:rgba(234,114,135,.22); color:var(--err); }
+  .muted { color:var(--text2); font-size:14px; }
+  input, select, textarea { width:100%; font:inherit; color:var(--text); background:rgba(2,6,11,.45); padding:9px 10px; margin:4px 0 12px; border:1px solid var(--divider); border-radius:12px; color-scheme:dark; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary); }
+  label { font-size:13px; color:var(--text2); }
+  img.photo { max-width:100%; border-radius:12px; margin-top:6px; }
+  .log { padding:12px 14px; }
+  .actions { display:flex; gap:8px; margin-top:4px; }
+  .toast { position:fixed; left:12px; right:12px; bottom:16px; max-width:696px; margin:auto; background:rgba(234,114,135,.95); color:#02060b; padding:12px 14px; border-radius:12px; z-index:5; }
 </style>
 </head>
 <body>
@@ -29,6 +40,16 @@
 <main id="app"></main>
 <script>
 const $ = (s) => document.querySelector(s);
+function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t); setTimeout(() => t.remove(), 4000); }
+// Two-step delete without a browser dialog: first click arms, second click confirms.
+function armDelete(btn, label, action) {
+  let armed = false, timer;
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!armed) { armed = true; btn.textContent = 'Zeker weten?'; btn.classList.add('armed'); timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove('armed'); }, 3000); return; }
+    clearTimeout(timer); await action();
+  };
+}
 const TYPES = { water:'💧 Water', feed:'🌿 Voeding', repot:'🪴 Verpot', prune:'✂️ Gesnoeid', note:'📝 Notitie', photo:'📷 Foto' };
 const api = async (path, opts = {}) => {
   const isForm = opts.body instanceof FormData;
@@ -102,31 +123,49 @@ async function showPlant(id) {
         <label>Aangeschaft</label><input name="acquired" type="date" value="${p.acquired ?? ''}">
         <label>Giftig voor kat</label><select name="toxic_cat"><option value="">Zoals soort</option><option value="1" ${p.toxic_cat == 1 ? 'selected' : ''}>Ja</option><option value="0">Nee</option></select>
         <label>Giftig voor kind</label><select name="toxic_child"><option value="">Zoals soort</option><option value="1" ${p.toxic_child == 1 ? 'selected' : ''}>Ja</option><option value="0">Nee</option></select>
-        <button>Opslaan</button>
+        <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">🗑 Plant verwijderen</button></div>
       </form></div>
     <h3>Dagboek</h3>
     ${p.logs.map((l) => `<div class="card log"><div class="row"><strong>${TYPES[l.type]}</strong><span class="muted">${fmt(l.date)} ${l.outcome === 'good' ? '👍' : l.outcome === 'bad' ? '👎' : ''}</span></div>
       ${l.note ? `<div>${esc(l.note)}</div>` : ''}${l.photo ? `<img class="photo" src="photos/${esc(l.photo)}">` : ''}
-      <button class="sec" data-del="${l.id}">Verwijder</button></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
+      <button type="button" class="danger" data-del="${l.id}">Verwijder</button></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
   $('#log').onsubmit = async (e) => {
     e.preventDefault(); const f = new FormData(e.target);
     if (!f.get('photo')?.size) f.delete('photo');
     for (const [k, v] of [...f]) if (v === '') f.delete(k);
-    await api(`plants/${id}/logs`, { method:'POST', body:f }).catch((x) => alert(x.message)); showPlant(id);
+    await api(`plants/${id}/logs`, { method:'POST', body:f }).catch((x) => toast(x.message)); showPlant(id);
   };
   $('#edit').onsubmit = async (e) => {
     e.preventDefault(); const body = Object.fromEntries(new FormData(e.target));
-    await api('plants/' + id, { method:'PATCH', body }).catch((x) => alert(x.message)); showPlant(id);
+    await api('plants/' + id, { method:'PATCH', body }).catch((x) => toast(x.message)); showPlant(id);
   };
-  document.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-    if (confirm('Verwijderen?')) { await api(`plants/${id}/logs/${b.dataset.del}`, { method:'DELETE' }); showPlant(id); }
+  document.querySelectorAll('[data-del]').forEach((b) => armDelete(b, 'Verwijder', async () => {
+    await api(`plants/${id}/logs/${b.dataset.del}`, { method:'DELETE' }); showPlant(id);
+  }));
+  armDelete($('#delplant'), '🗑 Plant verwijderen', async () => {
+    await api('plants/' + id, { method:'DELETE' }).catch((x) => toast(x.message)); showList();
   });
 }
 
 $('#back').onclick = showList;
 $('#add').onclick = async () => {
-  const name = prompt('Naam van de plant?'); if (!name) return;
-  const p = await api('plants', { method:'POST', body:{ name, acquired: today() } }); showPlant(p.id);
+  const species = await api('species');
+  $('#back').hidden = false; $('#title').textContent = 'Nieuwe plant';
+  $('#app').innerHTML = `<div class="card"><form id="new">
+    <label>Naam</label><input name="name" required autofocus>
+    <label>Soort</label><select name="species_id"><option value="">–</option>${species.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+    <label>Kamer</label><input name="room">
+    <label>Plek</label><input name="location_note">
+    <label>Aangeschaft</label><input name="acquired" type="date" value="${today()}">
+    <div class="actions"><button>Toevoegen</button><button type="button" class="sec" id="cancel">Annuleren</button></div>
+  </form></div>`;
+  $('#cancel').onclick = showList;
+  $('#new').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ''));
+    const p = await api('plants', { method:'POST', body }).catch((x) => toast(x.message));
+    if (p) showPlant(p.id);
+  };
 };
 showList();
 </script>
