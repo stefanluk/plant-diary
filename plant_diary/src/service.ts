@@ -203,8 +203,30 @@ export class PlantService {
     this.db.prepare('DELETE FROM plants WHERE id = ?').run(id);
   }
 
+  private syncLast(plantId: number, type: string): void {
+    const column = { water: 'last_watered', feed: 'last_fed', repot: 'last_repotted' }[type];
+    if (!column) return;
+    const m = this.db.prepare('SELECT MAX(date) AS d FROM logs WHERE plant_id = ? AND type = ?').get(plantId, type) as Row;
+    if (m.d) this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ?`).run(m.d, plantId);
+  }
+
+  updateLog(plantId: number, logId: number, body: Row): Row {
+    const old = this.db.prepare('SELECT * FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
+    if (!old) throw new HttpError(404, 'Bericht niet gevonden');
+    if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
+    const type = body.type ?? old.type;
+    const date = body.date || old.date;
+    const note = 'note' in body ? body.note || null : old.note;
+    this.db.prepare('UPDATE logs SET type = ?, date = ?, note = ? WHERE id = ?').run(type, date, note, logId);
+    this.syncLast(plantId, String(old.type));
+    this.syncLast(plantId, String(type));
+    return this.getPlant(plantId);
+  }
+
   deleteLog(plantId: number, logId: number): void {
+    const old = this.db.prepare('SELECT type FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
     this.db.prepare('DELETE FROM logs WHERE id = ? AND plant_id = ?').run(logId, plantId);
+    if (old) this.syncLast(plantId, String(old.type));
   }
 
   dueToday(): Row[] {

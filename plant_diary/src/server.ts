@@ -65,6 +65,8 @@ export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual) {
     } else body = req.body as any;
     return reply.code(201).send(refresh(svc.addLog(id(req), body)));
   });
+  app.patch('/api/plants/:id/logs/:logId', async (req) =>
+    refresh(svc.updateLog(id(req), Number((req.params as any).logId), req.body as any)));
   app.delete('/api/plants/:id/logs/:logId', async (req, reply) => {
     svc.deleteLog(id(req), Number((req.params as any).logId));
     return reply.code(204).send();
