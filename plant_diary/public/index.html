@@ -18,6 +18,12 @@
   button.danger { background:rgba(234,114,135,.16); color:var(--err); border:1px solid rgba(234,114,135,.5); }
   button.danger.armed { background:var(--err); color:#02060b; }
   main { padding:12px; max-width:720px; margin:auto; }
+  main.wide { max-width:1040px; }
+  .cols { display:grid; grid-template-columns:1fr; gap:0 16px; align-items:start; }
+  @media (min-width:860px) { .cols { grid-template-columns:minmax(0,5fr) minmax(0,7fr); } }
+  button.quiet { background:none; color:var(--text2); padding:6px 4px; font-size:13px; text-decoration:underline; font-weight:400; }
+  dialog { background:rgb(14,20,27); color:var(--text); border:.5px solid var(--border); border-radius:var(--r); padding:16px; width:min(560px,94vw); max-height:90vh; }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
   .card { background:var(--card); backdrop-filter:blur(10px) saturate(1.25); border:.5px solid var(--border); border-radius:var(--r); padding:14px; margin-bottom:12px;
     box-shadow:3px 3px .5px -3.5px rgba(255,255,255,.3) inset,-2px -2px .5px -2px rgba(255,255,255,.2) inset,0 4px 16px rgba(0,0,0,.35); }
   .card[data-id] { cursor:pointer; }
@@ -74,11 +80,18 @@ const SOIL = { cactus:'Cactus/succulent', airy:'Doorlatend', standard:'Standaard
 const opt = (map, sel, blank) => (blank ? `<option value="">${blank}</option>` : '') +
   Object.entries(map).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
 
-function statusBadge(p) {
+function statusBadge(p, withDate = true) {
   if (p.days_overdue === null) return '<span class="badge">nog niet water gegeven</span>';
   if (p.days_overdue > 0) return `<span class="badge over">${p.days_overdue}d te laat</span>`;
   if (p.days_overdue === 0) return '<span class="badge warn">vandaag</span>';
-  return `<span class="badge">${fmt(p.next_water)}</span>`;
+  return withDate ? `<span class="badge">${fmt(p.next_water)}</span>` : '';
+}
+const needsWater = (p) => p.days_overdue === null || p.days_overdue >= 0;
+function modal(title, html) {
+  const d = document.createElement('dialog');
+  d.innerHTML = `<div class="row"><h3>${title}</h3><button type="button" class="sec" data-x>✕</button></div>${html}`;
+  document.body.append(d); d.addEventListener('close', () => d.remove());
+  d.querySelector('[data-x]').onclick = () => d.close(); d.showModal(); return d;
 }
 const toxic = (p) => (p.toxic ? '<span class="badge warn">⚠️ giftig</span>' : '');
 const lightBadge = (p) => p.light_status === 'too_bright' ? '<span class="badge warn">☀️ te licht</span>'
@@ -88,7 +101,7 @@ const lightRange = (s) => !s.light_min && !s.light_max ? '–'
   : s.light_min === s.light_max ? LIGHT[s.light_min] : `${LIGHT[s.light_min] ?? '…'} t/m ${LIGHT[s.light_max] ?? '…'}`;
 
 async function showList() {
-  $('#back').hidden = true; $('#title').textContent = 'Plantendagboek';
+  $('#back').hidden = true; $('#title').textContent = 'Plantendagboek'; $('#app').className = '';
   const plants = await api('plants');
   plants.sort((a, b) => (b.days_overdue ?? -999) - (a.days_overdue ?? -999));
   $('#app').innerHTML = plants.map((p) => `
@@ -97,7 +110,7 @@ async function showList() {
       <div class="muted">${speciesLine(p)}</div>
       <div class="muted">${esc(p.room || '')} ${lightBadge(p)}${toxic(p)}</div>
       <div class="row" style="margin-top:8px"><span class="muted">${esc(p.location_note || '')}</span>
-        <button data-water="${p.id}">💧 Water gegeven</button></div>
+        ${needsWater(p) ? `<button data-water="${p.id}">💧 Water gegeven</button>` : ''}</div>
     </div>`).join('') || '<p>Nog geen planten.</p>';
   document.querySelectorAll('[data-water]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation(); await api(`plants/${b.dataset.water}/logs`, { method:'POST', body:{ type:'water' } }); showList();
@@ -129,28 +142,15 @@ function infoBlock(p) {
 
 async function showPlant(id) {
   const [p, species] = await Promise.all([api('plants/' + id), api('species')]);
-  $('#back').hidden = false; $('#title').textContent = p.name;
+  $('#back').hidden = false; $('#title').textContent = p.name; $('#app').className = 'wide';
   const opts = species.map((s) => `<option value="${s.id}" ${s.id === p.species_id ? 'selected' : ''}>${esc(s.latin_name || s.name)}${s.name_nl ? ' (' + esc(s.name_nl) + ')' : ''}</option>`).join('');
-  $('#app').innerHTML = `
-    <div class="card">
-      <div class="row"><span>Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p)}</span></div>
-      <div class="muted">${speciesLine(p)}</div>
-      <div class="muted">Laatst water: ${fmt(p.last_watered)} · voeding: ${fmt(p.last_fed)} · verpot: ${fmt(p.last_repotted)}</div>
-      <div class="muted">${lightBadge(p)}${toxic(p)}</div>
-      <label style="margin-top:10px;display:block">Standplaats (waar staat de plant nu?)</label>
-      <select id="lightlevel">${opt(LIGHT, p.light_level, '– kies –')}</select>
-    </div>
-    ${infoBlock(p)}
-    <div class="card"><h3>Loggen</h3>
-      <form id="log">
+  const logForm = `<form id="log">
         <select name="type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
         <input type="date" name="date" value="${today()}">
         <textarea name="note" rows="2" placeholder="Notitie"></textarea>
         <input type="file" name="photo" accept="image/*" capture="environment">
-        <button>Opslaan</button>
-      </form></div>
-    <div class="card"><h3>Schema & gegevens</h3>
-      <form id="edit">
+        <button>Opslaan</button></form>`;
+  const editForm = `<form id="edit">
         <label>Naam</label><input name="name" value="${esc(p.name)}">
         <label>Soort</label><select name="species_id"><option value="">–</option>${opts}</select>
         <label>Waterinterval overschrijven (dagen, leeg = soort/seizoen)</label><input name="water_interval_override" type="number" min="1" value="${p.water_interval_override ?? ''}">
@@ -163,7 +163,19 @@ async function showPlant(id) {
         <label>Aangeschaft</label><input name="acquired" type="date" value="${p.acquired ?? ''}">
         <label>Giftig</label><select name="toxic"><option value="">Zoals soort</option><option value="1" ${p.toxic_own == 1 ? 'selected' : ''}>Ja</option><option value="0" ${p.toxic_own === 0 ? 'selected' : ''}>Nee</option></select>
         <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">🗑 Plant verwijderen</button></div>
-      </form></div>
+      </form>`;
+  $('#app').innerHTML = `
+    <div class="cols"><div>
+    <div class="card">
+      <div class="row"><span>Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</span></div>
+      <div class="muted">${speciesLine(p)}</div>
+      <div class="muted" style="margin-top:8px">Laatst water: ${fmt(p.last_watered)}<br>Voeding: ${fmt(p.last_fed)}<br>Verpot: ${fmt(p.last_repotted)}</div>
+      <div class="muted">${lightBadge(p)}${toxic(p)}</div>
+      <label style="margin-top:10px;display:block">Standplaats (waar staat de plant nu?)</label>
+      <select id="lightlevel">${opt(LIGHT, p.light_level, '– kies –')}</select>
+    </div>
+    <div class="actions" style="margin-bottom:12px"><button id="openlog">✍️ Schrijf update</button><button class="quiet" id="openedit">Schema bewerken</button></div>
+    </div><div>${infoBlock(p)}</div></div>
     <h3>Dagboek</h3>
     ${p.logs.map((l) => `<div class="card log"><div class="row"><strong>${TYPES[l.type]}</strong><span class="muted">${fmt(l.date)}</span></div>
       ${l.note ? `<div>${esc(l.note)}</div>` : ''}${l.photo ? `<img class="photo" src="photos/${esc(l.photo)}">` : ''}
@@ -172,26 +184,32 @@ async function showPlant(id) {
     await api('plants/' + id, { method:'PATCH', body:{ light_level: e.target.value || null } }).catch((x) => toast(x.message)); showPlant(id);
   };
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);
-  $('#log').onsubmit = async (e) => {
-    e.preventDefault(); const f = new FormData(e.target);
-    if (!f.get('photo')?.size) f.delete('photo');
-    for (const [k, v] of [...f]) if (v === '') f.delete(k);
-    await api(`plants/${id}/logs`, { method:'POST', body:f }).catch((x) => toast(x.message)); showPlant(id);
+  $('#openlog').onclick = () => {
+    const d = modal('Update schrijven', logForm);
+    d.querySelector('#log').onsubmit = async (e) => {
+      e.preventDefault(); const f = new FormData(e.target);
+      if (!f.get('photo')?.size) f.delete('photo');
+      for (const [k, v] of [...f]) if (v === '') f.delete(k);
+      await api(`plants/${id}/logs`, { method:'POST', body:f }).catch((x) => toast(x.message)); d.close(); showPlant(id);
+    };
   };
-  $('#edit').onsubmit = async (e) => {
-    e.preventDefault(); const body = Object.fromEntries(new FormData(e.target));
-    await api('plants/' + id, { method:'PATCH', body }).catch((x) => toast(x.message)); showPlant(id);
+  $('#openedit').onclick = () => {
+    const d = modal('Schema & gegevens', editForm);
+    d.querySelector('#edit').onsubmit = async (e) => {
+      e.preventDefault(); const body = Object.fromEntries(new FormData(e.target));
+      await api('plants/' + id, { method:'PATCH', body }).catch((x) => toast(x.message)); d.close(); showPlant(id);
+    };
+    armDelete(d.querySelector('#delplant'), '🗑 Plant verwijderen', async () => {
+      await api('plants/' + id, { method:'DELETE' }).catch((x) => toast(x.message)); d.close(); showList();
+    });
   };
   document.querySelectorAll('[data-del]').forEach((b) => armDelete(b, 'Verwijder', async () => {
     await api(`plants/${id}/logs/${b.dataset.del}`, { method:'DELETE' }); showPlant(id);
   }));
-  armDelete($('#delplant'), '🗑 Plant verwijderen', async () => {
-    await api('plants/' + id, { method:'DELETE' }).catch((x) => toast(x.message)); showList();
-  });
 }
 
 function editSpecies(p) {
-  const s = p.species;
+  const s = p.species; $('#app').className = '';
   $('#title').textContent = 'Soort bewerken';
   const txt = (n, l) => `<label>${l}</label><textarea name="${n}" rows="2">${esc(s[n])}</textarea>`;
   $('#app').innerHTML = `<div class="card"><p class="muted">Wijzigingen gelden voor alle planten van deze soort.</p><form id="sp">
@@ -220,6 +238,7 @@ function editSpecies(p) {
 
 $('#back').onclick = showList;
 $('#add').onclick = () => {
+  $('#app').className = '';
   $('#back').hidden = false; $('#title').textContent = 'Nieuwe plant';
   let chosen = null, timer;
   $('#app').innerHTML = `<div class="card"><form id="new">
