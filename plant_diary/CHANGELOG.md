@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.2
+- UI files are always revalidated, so updates show up without a manual cache clear.
+
 ## 0.11.1
 - Add-on icon and logo.
 
