@@ -111,7 +111,7 @@ function plantBlock(p, detail = false) {
   return `<div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : statusBadge(p)}</div>
     ${line(speciesLine(p))}
     ${detail ? `<div style="margin-top:8px">Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</div>` : ''}
-    ${dates}${line(place)}${line(esc(p.pot))}${line(p.light_level ? 'Standplaats: ' + LIGHT[p.light_level] : '')}
+    ${dates}${line(place)}${line(p.pot ? 'Pot: ' + (isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm') : '')}${line(p.light_level ? 'Standplaats: ' + LIGHT[p.light_level] : '')}
     ${line(lightBadge(p))}`;
 }
 
@@ -174,7 +174,7 @@ async function showPlant(id) {
         <label>Kamer</label><input name="room" value="${esc(p.room)}">
         <label>Plek</label><input name="location_note" value="${esc(p.location_note)}">
         ${p.light ? `<label>Eerdere lichtnotitie</label><input name="light" value="${esc(p.light)}">` : ''}
-        <label>Pot</label><input name="pot" value="${esc(p.pot)}">
+        <label>Pot (diameter in cm)</label><input name="pot" type="number" min="1" max="200" step="0.5" value="${isNaN(p.pot) ? '' : p.pot ?? ''}">
         <label>Aangeschaft</label><input name="acquired" type="date" value="${p.acquired ?? ''}">
         <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">🗑 Plant verwijderen</button></div>
       </form>`;
@@ -264,6 +264,7 @@ $('#add').onclick = () => {
     <label>Standplaats</label><select name="light_level">${opt(LIGHT, '', '– kies –')}</select>
     <label>Kamer</label><input name="room">
     <label>Plek</label><input name="location_note">
+    <label>Pot (diameter in cm)</label><input name="pot" type="number" min="1" max="200" step="0.5" inputmode="decimal">
     <label>Aangeschaft</label><input name="acquired" type="date" value="${today()}">
     <div class="actions"><button>Toevoegen</button><button type="button" class="sec" id="cancel">Annuleren</button></div>
   </form></div>`;

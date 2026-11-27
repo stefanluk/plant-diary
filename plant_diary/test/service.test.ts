@@ -122,3 +122,9 @@ test('resetAll empties the database and restarts ids', () => {
   assert.equal(svc.listSpecies().length, 0);
   assert.equal(svc.createPlant({ name: 'Y' }).id, 1);
 });
+
+test('pot must be a diameter in cm', () => {
+  const svc = new PlantService(openDb(':memory:'));
+  assert.equal(svc.createPlant({ name: 'A', pot: '14,5' }).pot, '14.5');
+  assert.throws(() => svc.createPlant({ name: 'B', pot: 'terracotta' }), /diameter/);
+});

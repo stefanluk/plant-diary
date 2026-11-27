@@ -23,6 +23,11 @@ function validate(data: Row): void {
       throw new HttpError(400, `${f} moet een van ${LIGHT_LEVELS.join(', ')} zijn`);
   if (data.soil != null && !(SOILS as readonly string[]).includes(data.soil))
     throw new HttpError(400, `soil moet een van ${SOILS.join(', ')} zijn`);
+  if (data.pot != null) {
+    const cm = Number(String(data.pot).replace(',', '.'));
+    if (!(cm > 0 && cm <= 200)) throw new HttpError(400, 'pot moet een diameter in cm zijn (1-200)');
+    data.pot = String(cm);
+  }
   for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (data[f] != null) data[f] = data[f] ? 1 : 0;
 }
 
