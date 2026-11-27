@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.4
+- Fix: back arrow on the plant page.
+
 ## 0.11.3
 - Plant card: feeding/repotting dates as chips, tidier footer.
 
