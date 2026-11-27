@@ -6,7 +6,7 @@
 <title>Plantendagboek</title>
 <style>
   :root { --primary:#7aa2be; --bg:#0d1117; --surface:#161b22; --raised:#1c232c; --text:#e6e9ee; --text2:#8b95a3;
-    --border:#2a323d; --ok:#76d698; --warn:#e3b341; --err:#ea7287; --r:10px; }
+    --border:#2a323d; --ok:#76d698; --warn:#e3b341; --err:#ea7287; --r:6px; }
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--text); background:var(--bg); min-height:100vh; }
   header { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 16px; display:flex; gap:12px; align-items:center; position:sticky; top:0; z-index:2; }
@@ -31,7 +31,7 @@
   h3.ttl { margin:0; font-size:18px; }
   .badge.toxic { background:rgba(234,114,135,.08); border-color:rgba(234,114,135,.3); color:#d98a99; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
-  .badge { font-size:12px; padding:1px 8px; border-radius:6px; background:var(--raised); border:1px solid var(--border); margin-left:0; white-space:nowrap; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:4px; background:var(--raised); border:1px solid var(--border); margin-left:0; white-space:nowrap; }
   .badge.warn { background:rgba(227,179,65,.12); border-color:rgba(227,179,65,.35); color:var(--warn); }
   .badge.next { background:rgba(122,162,190,.12); border-color:rgba(122,162,190,.4); color:var(--primary); }
   .badge.over { background:rgba(234,114,135,.12); border-color:rgba(234,114,135,.4); color:var(--err); }
@@ -39,26 +39,31 @@
   input, select, textarea { width:100%; font:inherit; color:var(--text); background:var(--bg); padding:8px 10px; margin:4px 0 12px; border:1px solid var(--border); border-radius:8px; color-scheme:dark; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary); }
   label { font-size:13px; color:var(--text2); }
-  .plants { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .plants { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr)); gap:14px; }
   .plants .pcard { margin:0; }
-  .pcard { padding:0; overflow:hidden; display:flex; flex-direction:column; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.35); margin-bottom:16px; }
-  .pcard[data-id]:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.45); }
-  .pcard[data-id] { transition:transform .15s, box-shadow .15s, border-color .15s; }
-  .media { position:relative; aspect-ratio:16/9; background:linear-gradient(135deg,#1b2a24,#22362d); display:flex; align-items:center; justify-content:center; font-size:44px; }
+  .pcard { padding:0; overflow:hidden; display:flex; border-radius:6px; margin-bottom:14px; min-height:168px; }
+  .pcard[data-id] { transition:border-color .15s, background .15s; }
+  .pcard[data-id]:hover { border-color:#47556a; background:var(--raised); }
+  .media { flex:none; width:116px; position:relative; background:linear-gradient(160deg,#1b2a24,#22362d); display:flex; align-items:center; justify-content:center; font-size:38px; }
+  .media.big { width:clamp(150px,38%,220px); }
   .media img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
   .media img#thumb { cursor:zoom-in; }
-  .media .badge { position:absolute; top:10px; right:10px; backdrop-filter:blur(6px); background:rgba(13,17,23,.72); font-size:12.5px; padding:3px 10px; border-radius:999px; }
-  .media .badge.over { background:rgba(60,20,28,.8); } .media .badge.warn { background:rgba(60,48,15,.8); } .media .badge.next { background:rgba(20,38,52,.8); }
-  .pbody { padding:14px 16px 12px; flex:1; }
-  .pbody .meta { margin-top:2px; }
+  .pmain { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .pbody { padding:14px 16px 8px; flex:1; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-  .pfoot { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--border); min-height:52px; }
+  .pfoot { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; padding:8px 16px 14px; }
   .pfoot .muted { font-size:13px; }
-  .entry { display:flex; gap:12px; align-items:flex-start; }
-  .entry .ico { flex:none; width:34px; height:34px; border-radius:10px; background:var(--raised); display:flex; align-items:center; justify-content:center; }
+  .pfoot .side { display:flex; flex-direction:column; align-items:flex-end; gap:8px; margin-left:auto; }
+  .entry { display:flex; gap:12px; align-items:flex-start; border-left:3px solid var(--border); }
+  .entry.water { border-left-color:var(--primary); } .entry.feed { border-left-color:var(--ok); } .entry.repot { border-left-color:#c9956b; }
+  .entry.prune { border-left-color:var(--warn); } .entry.note { border-left-color:var(--text2); }
+  .entry .ico { flex:none; width:32px; height:32px; border-radius:6px; background:var(--raised); display:flex; align-items:center; justify-content:center; }
   .entry .grow { flex:1; min-width:0; }
+  .kv { display:grid; grid-template-columns:minmax(80px,110px) 1fr; border-top:1px solid var(--border); }
+  .kv > * { padding:9px 0; border-bottom:1px solid var(--border); }
+  .kv > .k { color:var(--text2); font-size:13px; }
   img.big { display:block; max-width:100%; max-height:80vh; margin:auto; border-radius:8px; }
-  .log { padding:12px 16px; border-radius:14px; }
+  .log { padding:12px 16px; }
   .actions { display:flex; gap:8px; margin-top:4px; }
   .toast { position:fixed; left:12px; right:12px; bottom:16px; max-width:696px; margin:auto; background:var(--err); color:#0d1117; padding:12px 14px; border-radius:8px; z-index:5; }
   .warnbox { background:rgba(227,179,65,.1); border:1px solid rgba(227,179,65,.35); color:var(--warn); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
@@ -127,20 +132,20 @@ const lightRange = (s) => !s.light_min && !s.light_max ? '–'
 function plantCard(p, detail = false, action = '') {
   const where = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
   const place = [where, p.light_level ? `(${LIGHT[p.light_level]})` : ''].filter(Boolean).join(' ');
-  const dates = detail ? [['Voeding', p.last_fed], ['Verpot', p.last_repotted]].filter(([, d]) => d) : [];
-  const line = (html) => (html ? `<div class="muted">${html}</div>` : '');
+  const dates = detail ? [['Voeding', p.last_fed], ['Verpot', p.last_repotted]].filter(([, d]) => d).map(([l, d]) => `${l} ${fmt(d)}`).join('<br>') : '';
   const chips = [p.pot ? `<span class="badge">Pot ${isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm'}</span>` : '', lightBadge(p)].filter(Boolean).join('');
   const media = p.photo ? `<img ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="">` : '<span aria-hidden="true">🪴</span>';
-  const foot = detail ? [dates.map(([l, d]) => `${l} ${fmt(d)}`).join(' · '), action] : [action ? '' : '', action];
   return `<div class="card pcard"${detail ? '' : ` data-id="${p.id}"`}>
-    <div class="media">${media}${statusBadge(p)}</div>
-    <div class="pbody">
-      <div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : ''}</div>
-      <div class="muted meta">${speciesLine(p)}</div>
-      ${line(place)}
-      ${chips ? `<div class="chips">${chips}</div>` : ''}
+    <div class="media${detail ? ' big' : ''}">${media}</div>
+    <div class="pmain">
+      <div class="pbody">
+        <div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : ''}</div>
+        <div class="muted">${speciesLine(p)}</div>
+        ${place ? `<div class="muted">${place}</div>` : ''}
+        ${chips ? `<div class="chips">${chips}</div>` : ''}
+      </div>
+      <div class="pfoot"><span class="muted">${dates}</span><div class="side">${statusBadge(p)}${action}</div></div>
     </div>
-    ${foot[0] || foot[1] ? `<div class="pfoot"><span class="muted">${foot[0]}</span>${foot[1]}</div>` : ''}
   </div>`;
 }
 
@@ -164,7 +169,7 @@ async function showList() {
 function infoBlock(p) {
   const s = p.species;
   if (!s) return '<div class="card"><h3 class="ttl">Informatie &amp; verzorging</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
-  const tip = (label, v) => `<div><span class="muted">${label}</span><br>${v ? esc(v) : '<span class="muted">nog niet ingevuld</span>'}</div>`;
+  const tip = (label, v) => `<div class="k">${label}</div><div>${v ? esc(v) : '<span class="muted">nog niet ingevuld</span>'}</div>`;
   const water = s.water_summer_days ? `elke ${s.water_summer_days} dagen (zomer) · ${s.water_winter_days ?? s.water_summer_days} dagen (winter)` : '';
   const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
     ? `<div class="warnbox">${p.light_status === 'too_bright' ? 'Staat te licht' : 'Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
@@ -172,7 +177,7 @@ function infoBlock(p) {
     ${p.toxic ? '<div style="margin-bottom:10px"><span class="badge toxic" style="margin-left:0">Giftig voor huisdieren en mensen</span></div>' : ''}
     ${mismatch}
     ${s.description ? `<p>${esc(s.description)}</p>` : ''}
-    <div class="grid">
+    <div class="kv">
       ${tip('Water', water)}
       ${tip('Standplaats', lightRange(s) === '–' ? '' : lightRange(s))}
       ${tip('Grond', SOIL[p.soil_effective])}
@@ -211,7 +216,7 @@ async function showPlant(id) {
     </div><div>${infoBlock(p)}</div></div>
     <div class="row" style="margin-top:16px"><h3 style="margin:0">Dagboek</h3><button id="openlog">Schrijf update</button></div>
     <div style="height:10px"></div>
-    ${p.logs.map((l) => `<div class="card log entry"><div class="ico">${TYPES[l.type].split(' ')[0]}</div>
+    ${p.logs.map((l) => `<div class="card log entry ${l.type}"><div class="ico">${TYPES[l.type].split(' ')[0]}</div>
       <div class="grow"><div class="row"><strong>${TYPES[l.type].split(' ').slice(1).join(' ')}</strong><span class="muted">${fmt(l.date)}</span></div>
       ${l.note ? `<div>${esc(l.note)}</div>` : ''}
       <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
