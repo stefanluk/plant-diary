@@ -6,7 +6,7 @@ function infoBlock(p) {
   const s = p.species;
   if (!s) return `<div class="card"><h3 class="ttl">${t('Info &amp; care')}</h3><p class="muted">${t('No species linked. Choose a species when editing the plant.')}</p></div>`;
   const tip = (label, v) => `<div class="k">${label}</div><div>${v ? esc(v) : `<span class="muted">${t('not filled in yet')}</span>`}</div>`;
-  const water = s.water_summer_days ? t('every {summer} days (summer) · {winter} days (winter)', { summer: s.water_summer_days, winter: s.water_winter_days ?? s.water_summer_days }) : '';
+  const water = s.water_summer_days ? t('Every {summer} days (summer) · {winter} days (winter)', { summer: s.water_summer_days, winter: s.water_winter_days ?? s.water_summer_days }) : '';
   const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
     ? `<div class="warnbox">${t(p.light_status === 'too_bright' ? 'Too bright' : 'Too dark')}: ${t('now')} <strong>${LIGHT[p.light_level]}</strong>, ${t('ideal')} <strong>${lightRange(s)}</strong>.</div>` : '';
   return `<div class="card info"><div class="row"><h3 class="ttl">${t('Info &amp; care')}</h3><button class="quiet" id="editspecies">${t('Edit')}</button></div>

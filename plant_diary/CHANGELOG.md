@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.7
+- Capitalised watering interval text.
+
 ## 0.11.6
 - Fix: setting a species to not toxic is now saved correctly.
 
