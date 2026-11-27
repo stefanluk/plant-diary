@@ -1,4 +1,4 @@
-import { $, LIGHT, SOIL, TYPES, api, armDelete, esc, fmt, modal, opt, resizeImage, showError, t, toast, today } from './util.js';
+import { $, LIGHT, SOIL, TYPES, api, armDelete, esc, fmt, modal, opt, resizeImage, nav, showError, t, toast, today } from './util.js';
 import { bindWater, lightRange, needsWater, plantCard, waterActions } from './card.js';
 import { showList } from './list.js';
 
@@ -27,7 +27,7 @@ export async function showPlant(id) {
   $('#app').innerHTML = `<p class="muted">${t('Loading…')}</p>`;
   let p, species;
   try { [p, species] = await Promise.all([api('plants/' + id), api('species')]); } catch (x) { return showError(x, () => showPlant(id)); }
-  $('#back').hidden = false; $('#title').textContent = p.name; $('#app').className = 'wide';
+  nav.back = null; $('#back').hidden = false; $('#title').textContent = p.name; $('#app').className = 'wide';
   const opts = species.map((s) => `<option value="${s.id}" ${s.id === p.species_id ? 'selected' : ''}>${esc(s.latin_name || s.name)}${s.name_nl ? ' (' + esc(s.name_nl) + ')' : ''}</option>`).join('');
   const logForm = (l) => `<form id="log">
         <select name="type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${l && l.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
@@ -106,7 +106,7 @@ export async function showPlant(id) {
 
 export function editSpecies(p) {
   const s = p.species; $('#app').className = '';
-  $('#title').textContent = t('Edit species');
+  nav.back = () => showPlant(p.id); $('#title').textContent = t('Edit species');
   const txt = (n, l) => `<label>${l}</label><textarea name="${n}" rows="2">${esc(s[n])}</textarea>`;
   $('#app').innerHTML = `<div class="card"><p class="muted">${t('Changes apply to all plants of this species.')}</p><form id="sp">
     <label>${t('Latin name')}</label><input name="latin_name" value="${esc(s.latin_name || s.name)}">

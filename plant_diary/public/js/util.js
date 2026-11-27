@@ -1,4 +1,6 @@
 export const $ = (s) => document.querySelector(s);
+/** Optional override for the header back arrow (default: overview). */
+export const nav = { back: null };
 
 const i18n = await fetch('api/i18n').then((r) => r.json()).catch(() => ({ lang: 'en', messages: {} }));
 export const lang = i18n.lang;

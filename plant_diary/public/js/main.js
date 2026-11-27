@@ -1,4 +1,4 @@
-import { $, lang, t, toast } from './util.js';
+import { $, lang, nav, t, toast } from './util.js';
 import { showList } from './list.js';
 import { showAdd } from './add.js';
 
@@ -7,7 +7,7 @@ document.title = t('Plant Diary');
 $('#title').textContent = t('Plant Diary');
 $('#add').textContent = t('+ Plant');
 $('#back').setAttribute('aria-label', t('Back'));
-$('#back').onclick = () => showList();
+$('#back').onclick = () => (nav.back ? nav.back() : showList());
 $('#add').onclick = showAdd;
 window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); toast(e.reason?.message || t('Something went wrong')); });
 window.addEventListener('offline', () => toast(t('You are offline')));

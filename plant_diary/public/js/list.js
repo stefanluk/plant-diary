@@ -1,11 +1,11 @@
-import { $, api, armDelete, modal, showError, t, toast } from './util.js';
+import { $, api, armDelete, modal, nav, showError, t, toast } from './util.js';
 import { bindWater, needsWater, plantCard, waterActions } from './card.js';
 import { showPlant } from './plant.js';
 
 let listOrder = null;
 
 export async function showList(keepOrder = false) {
-  $('#back').hidden = true; $('#title').textContent = t('Plant Diary'); $('#app').className = 'wide';
+  nav.back = null; $('#back').hidden = true; $('#title').textContent = t('Plant Diary'); $('#app').className = 'wide';
   if (!keepOrder) $('#app').innerHTML = '<div class="plants"><div class="skel"></div><div class="skel"></div></div>';
   let plants;
   try { plants = await api('plants'); } catch (x) { return showError(x, () => showList()); }

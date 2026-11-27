@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.5
+- Back arrow on the species edit page returns to the plant.
+
 ## 0.11.4
 - Fix: back arrow on the plant page.
 

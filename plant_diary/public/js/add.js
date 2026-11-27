@@ -1,10 +1,10 @@
-import { $, LIGHT, api, esc, opt, t, toast, today } from './util.js';
+import { $, LIGHT, api, esc, nav, opt, t, toast, today } from './util.js';
 import { showList } from './list.js';
 import { showPlant } from './plant.js';
 
 export function showAdd() {
   $('#app').className = '';
-  $('#back').hidden = false; $('#title').textContent = t('New plant');
+  nav.back = null; $('#back').hidden = false; $('#title').textContent = t('New plant');
   let chosen = null, timer;
   $('#app').innerHTML = `<div class="card"><form id="new">
     <label>${t('Search species (Latin, Dutch or English)')}</label>
