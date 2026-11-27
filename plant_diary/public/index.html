@@ -39,11 +39,26 @@
   input, select, textarea { width:100%; font:inherit; color:var(--text); background:var(--bg); padding:8px 10px; margin:4px 0 12px; border:1px solid var(--border); border-radius:8px; color-scheme:dark; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary); }
   label { font-size:13px; color:var(--text2); }
-  .foot { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-top:10px; }
-  .foot .side { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
-  img.thumb { display:block; width:84px; height:84px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--border); }
+  .plants { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .plants .pcard { margin:0; }
+  .pcard { padding:0; overflow:hidden; display:flex; flex-direction:column; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.35); margin-bottom:16px; }
+  .pcard[data-id]:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.45); }
+  .pcard[data-id] { transition:transform .15s, box-shadow .15s, border-color .15s; }
+  .media { position:relative; aspect-ratio:16/9; background:linear-gradient(135deg,#1b2a24,#22362d); display:flex; align-items:center; justify-content:center; font-size:44px; }
+  .media img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  .media img#thumb { cursor:zoom-in; }
+  .media .badge { position:absolute; top:10px; right:10px; backdrop-filter:blur(6px); background:rgba(13,17,23,.72); font-size:12.5px; padding:3px 10px; border-radius:999px; }
+  .media .badge.over { background:rgba(60,20,28,.8); } .media .badge.warn { background:rgba(60,48,15,.8); } .media .badge.next { background:rgba(20,38,52,.8); }
+  .pbody { padding:14px 16px 12px; flex:1; }
+  .pbody .meta { margin-top:2px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .pfoot { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--border); min-height:52px; }
+  .pfoot .muted { font-size:13px; }
+  .entry { display:flex; gap:12px; align-items:flex-start; }
+  .entry .ico { flex:none; width:34px; height:34px; border-radius:10px; background:var(--raised); display:flex; align-items:center; justify-content:center; }
+  .entry .grow { flex:1; min-width:0; }
   img.big { display:block; max-width:100%; max-height:80vh; margin:auto; border-radius:8px; }
-  .log { padding:12px 16px; }
+  .log { padding:12px 16px; border-radius:14px; }
   .actions { display:flex; gap:8px; margin-top:4px; }
   .toast { position:fixed; left:12px; right:12px; bottom:16px; max-width:696px; margin:auto; background:var(--err); color:#0d1117; padding:12px 14px; border-radius:8px; z-index:5; }
   .warnbox { background:rgba(227,179,65,.1); border:1px solid rgba(227,179,65,.35); color:var(--warn); border-radius:8px; padding:8px 10px; margin-bottom:10px; }
@@ -108,35 +123,38 @@ const speciesLine = (p) => [p.latin_name || p.species_name, p.name_nl].filter(Bo
 const lightRange = (s) => !s.light_min && !s.light_max ? '–'
   : s.light_min === s.light_max ? LIGHT[s.light_min] : `${LIGHT[s.light_min] ?? '…'} t/m ${LIGHT[s.light_max] ?? '…'}`;
 
-/** Summary block shared by the overview cards and the plant page; `detail` adds schedule dates and an edit link. */
-function plantBlock(p, detail = false, action = '') {
+/** Card shared by the overview and the plant page: photo + water badge, body, footer with the action. */
+function plantCard(p, detail = false, action = '') {
   const where = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
   const place = [where, p.light_level ? `(${LIGHT[p.light_level]})` : ''].filter(Boolean).join(' ');
-  const dates = detail ? [['Voeding', p.last_fed], ['Verpot', p.last_repotted]]
-    .filter(([, d]) => d).map(([l, d]) => `<div class="muted">${l}: ${fmt(d)}</div>`).join('') : '';
+  const dates = detail ? [['Voeding', p.last_fed], ['Verpot', p.last_repotted]].filter(([, d]) => d) : [];
   const line = (html) => (html ? `<div class="muted">${html}</div>` : '');
-  return `<div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : ''}</div>
-    ${line(speciesLine(p))}
-    ${dates}${line(place)}${line(p.pot ? 'Pot: ' + (isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm') : '')}
-    ${line(lightBadge(p))}
-    <div class="foot">
-      <div>${p.photo ? `<img class="thumb" ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="">` : ''}</div>
-      <div class="side">${statusBadge(p)}${action}</div>
-    </div>`;
+  const chips = [p.pot ? `<span class="badge">Pot ${isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm'}</span>` : '', lightBadge(p)].filter(Boolean).join('');
+  const media = p.photo ? `<img ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="">` : '<span aria-hidden="true">🪴</span>';
+  const foot = detail ? [dates.map(([l, d]) => `${l} ${fmt(d)}`).join(' · '), action] : [action ? '' : '', action];
+  return `<div class="card pcard"${detail ? '' : ` data-id="${p.id}"`}>
+    <div class="media">${media}${statusBadge(p)}</div>
+    <div class="pbody">
+      <div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : ''}</div>
+      <div class="muted meta">${speciesLine(p)}</div>
+      ${line(place)}
+      ${chips ? `<div class="chips">${chips}</div>` : ''}
+    </div>
+    ${foot[0] || foot[1] ? `<div class="pfoot"><span class="muted">${foot[0]}</span>${foot[1]}</div>` : ''}
+  </div>`;
 }
 
 async function showList() {
-  $('#back').hidden = true; $('#title').textContent = 'Plantendagboek'; $('#app').className = '';
+  $('#back').hidden = true; $('#title').textContent = 'Plantendagboek'; $('#app').className = 'wide';
   const plants = await api('plants');
   plants.sort((a, b) => (b.days_overdue ?? -999) - (a.days_overdue ?? -999));
-  $('#app').innerHTML = plants.map((p) => `
-    <div class="card" data-id="${p.id}">
-      ${plantBlock(p, false, needsWater(p) ? `<button data-water="${p.id}">💧 Water gegeven</button>` : '')}
-    </div>`).join('') || '<p>Nog geen planten.</p>';
+  $('#app').innerHTML = plants.length
+    ? `<div class="plants">${plants.map((p) => plantCard(p, false, needsWater(p) ? `<button data-water="${p.id}">💧 Water gegeven</button>` : '')).join('')}</div>`
+    : '<p>Nog geen planten.</p>';
   document.querySelectorAll('[data-water]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation(); await api(`plants/${b.dataset.water}/logs`, { method:'POST', body:{ type:'water' } }); showList();
   });
-  document.querySelectorAll('.card').forEach((c) => c.onclick = () => showPlant(c.dataset.id));
+  document.querySelectorAll('.pcard').forEach((c) => c.onclick = () => showPlant(c.dataset.id));
   $('#app').insertAdjacentHTML('beforeend', '<div style="margin-top:24px;text-align:center"><button class="quiet" id="reset">Database leegmaken</button></div>');
   armDelete($('#reset'), 'Database leegmaken', async () => {
     await api('reset', { method:'POST' }).catch((x) => toast(x.message)); showList();
@@ -189,15 +207,15 @@ async function showPlant(id) {
       </form>`;
   $('#app').innerHTML = `
     <div class="cols"><div>
-    <div class="card">
-      ${plantBlock(p, true)}
-    </div>
+    ${plantCard(p, true, needsWater(p) ? '<button id="waterbtn">💧 Water gegeven</button>' : '')}
     </div><div>${infoBlock(p)}</div></div>
     <div class="row" style="margin-top:16px"><h3 style="margin:0">Dagboek</h3><button id="openlog">Schrijf update</button></div>
     <div style="height:10px"></div>
-    ${p.logs.map((l) => `<div class="card log"><div class="row"><strong>${TYPES[l.type]}</strong><span class="muted">${fmt(l.date)}</span></div>
+    ${p.logs.map((l) => `<div class="card log entry"><div class="ico">${TYPES[l.type].split(' ')[0]}</div>
+      <div class="grow"><div class="row"><strong>${TYPES[l.type].split(' ').slice(1).join(' ')}</strong><span class="muted">${fmt(l.date)}</span></div>
       ${l.note ? `<div>${esc(l.note)}</div>` : ''}
-      <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
+      <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
+  if ($('#waterbtn')) $('#waterbtn').onclick = async () => { await api(`plants/${id}/logs`, { method:'POST', body:{ type:'water' } }).catch((x) => toast(x.message)); showPlant(id); };
   if ($('#thumb')) $('#thumb').onclick = () => modal('', `<img class="big" src="photos/${esc(p.photo)}" alt="">`);
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);
   $('#openlog').onclick = () => {
