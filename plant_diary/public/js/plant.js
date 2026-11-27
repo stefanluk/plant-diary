@@ -31,7 +31,7 @@ export async function showPlant(id) {
   const opts = species.map((s) => `<option value="${s.id}" ${s.id === p.species_id ? 'selected' : ''}>${esc(s.latin_name || s.name)}${s.name_nl ? ' (' + esc(s.name_nl) + ')' : ''}</option>`).join('');
   const logForm = (l) => `<form id="log">
         <select name="type">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${l && l.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <input type="date" name="date" value="${l ? l.date : today()}">
+        <input type="date" name="date" value="${l ? l.date : today()}" max="${today()}">
         <textarea name="note" rows="3" placeholder="Notitie">${l ? esc(l.note) : ''}</textarea>
         <div class="actions"><button>Opslaan</button>${l ? '<button type="button" class="danger" id="dellog">Verwijder bericht</button>' : ''}</div></form>`;
   const editForm = `<form id="edit">
@@ -54,10 +54,9 @@ export async function showPlant(id) {
     </div><div>${infoBlock(p)}</div></div>
     <div class="row" style="margin-top:16px"><h3 style="margin:0">Dagboek</h3><button id="openlog">Schrijf update</button></div>
     <div style="height:10px"></div>
-    ${p.logs.map((l) => `<div class="card log entry ${l.type}"><div class="ico">${TYPES[l.type].split(' ')[0]}</div>
-      <div class="grow"><div class="row"><strong>${TYPES[l.type].split(' ').slice(1).join(' ')}</strong><span class="muted">${fmt(l.date)}</span></div>
-      ${l.note ? `<div>${esc(l.note)}</div>` : ''}
-      <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
+    ${p.logs.map((l) => `<div class="card log entry ${l.type}"><div class="row"><div class="ttlrow"><span class="ico">${TYPES[l.type].split(' ')[0]}</span><strong>${TYPES[l.type].split(' ').slice(1).join(' ')}</strong></div><span class="muted">${fmt(l.date)}</span></div>
+      ${l.note ? `<div class="note">${esc(l.note)}</div>` : ''}
+      <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
   bindWater(() => showPlant(id));
   if ($('#thumb')) $('#thumb').onclick = () => modal('', `<img class="big" src="photos/${esc(p.photo)}" alt="">`);
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);

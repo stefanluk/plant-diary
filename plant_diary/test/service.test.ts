@@ -248,3 +248,10 @@ test('daily summary sends one push for all due plants, once a day', async () => 
     globalThis.fetch = realFetch;
   }
 });
+
+test('diary entries cannot be dated in the future', () => {
+  const svc = new PlantService(openDb(':memory:'), () => new Date(2026, 6, 15));
+  const id = Number(svc.createPlant({ name: 'A' }).id);
+  assert.throws(() => svc.addLog(id, { type: 'note', date: '2026-07-16' }), /toekomst/);
+  assert.doesNotThrow(() => svc.addLog(id, { type: 'note', date: '2026-07-15' }));
+});

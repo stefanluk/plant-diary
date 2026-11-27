@@ -1,4 +1,4 @@
-import { LIGHT, api, esc, fmt, isoDate, modal, toast } from './util.js';
+import { LIGHT, api, esc, fmt, toast } from './util.js';
 
 // One badge for watering: overdue/today, the next date (future, blue) or the last date (past, grey).
 export function statusBadge(p) {
@@ -16,11 +16,10 @@ export const speciesLine = (p) => [p.latin_name || p.species_name, p.name_nl].fi
 export const lightRange = (s) => !s.light_min && !s.light_max ? '–'
   : s.light_min === s.light_max ? LIGHT[s.light_min] : `${LIGHT[s.light_min] ?? '…'} t/m ${LIGHT[s.light_max] ?? '…'}`;
 
-/** "Water gegeven" plus a calendar button for watering on another date. */
-export const waterActions = (id) => `<div class="wbtns"><button data-water="${id}">💧 Water gegeven</button><button class="sec" data-water-date="${id}" title="Water gegeven op een andere datum" aria-label="Water gegeven op een andere datum">📅</button></div>`;
+export const waterActions = (id) => `<button data-water="${id}">💧 Water gegeven</button>`;
 
-async function giveWater(id, date, after) {
-  const r = await api(`plants/${id}/logs`, { method: 'POST', body: date ? { type: 'water', date } : { type: 'water' } });
+async function giveWater(id, after) {
+  const r = await api(`plants/${id}/logs`, { method: 'POST', body: { type: 'water' } });
   toast('💧 Water gegeven', true, { label: 'Ongedaan maken', fn: async () => { await api(`plants/${id}/logs/${r.log_id}`, { method: 'DELETE' }); await after(); } });
   await after();
 }
@@ -29,18 +28,7 @@ async function giveWater(id, date, after) {
 export function bindWater(after) {
   document.querySelectorAll('[data-water]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();
-    try { await giveWater(b.dataset.water, null, after); } catch (x) { toast(x.message); }
-  });
-  document.querySelectorAll('[data-water-date]').forEach((b) => b.onclick = (e) => {
-    e.stopPropagation();
-    const d = modal('Water gegeven op…', `<form id="wd"><input type="date" name="date" value="${isoDate(-1)}" max="${isoDate()}" required>
-      <div class="actions"><button>Opslaan</button></div></form>`);
-    d.querySelector('#wd').onsubmit = async (ev) => {
-      ev.preventDefault();
-      const date = new FormData(ev.target).get('date');
-      d.close();
-      try { await giveWater(b.dataset.waterDate, date, after); } catch (x) { toast(x.message); }
-    };
+    try { await giveWater(b.dataset.water, after); } catch (x) { toast(x.message); }
   });
 }
 

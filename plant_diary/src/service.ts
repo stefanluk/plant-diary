@@ -63,9 +63,10 @@ const pick = (src: Row, fields: readonly string[]): Row =>
       }),
   );
 
-function checkLog(body: Row): void {
+function checkLog(body: Row, today: string): void {
   checkText(body.note, 'note');
   if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, 'date moet YYYY-MM-DD zijn');
+  if (body.date && String(body.date) > today) throw new HttpError(400, 'Datum mag niet in de toekomst liggen');
 }
 
 export const BACKUP_FORMAT = 'plantendagboek-backup';
@@ -227,7 +228,7 @@ export class PlantService {
 
   addLog(plantId: number, body: Row): Row {
     this.getPlant(plantId);
-    checkLog(body);
+    checkLog(body, toISODate(this.now()));
     const type = body.type;
     if (!LOG_TYPES.includes(type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, 'outcome moet good of bad zijn');
@@ -321,7 +322,7 @@ export class PlantService {
   updateLog(plantId: number, logId: number, body: Row): Row {
     const old = this.db.prepare('SELECT * FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
     if (!old) throw new HttpError(404, 'Bericht niet gevonden');
-    checkLog(body);
+    checkLog(body, toISODate(this.now()));
     if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     const type = body.type ?? old.type;
     const date = body.date || old.date;
