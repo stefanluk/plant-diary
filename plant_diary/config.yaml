@@ -1,5 +1,5 @@
 name: Plantendagboek
-version: "0.6.0"
+version: "0.7.0"
 slug: plant_diary
 description: Houseplant diary and watering schedule with MQTT sensors and push reminders
 arch: [amd64, aarch64]
@@ -17,10 +17,8 @@ services:
 options:
   notify_service: ""
   notify_hour: 9
-  seed: true
   perenual_api_key: ""
 schema:
   notify_service: str?
   notify_hour: int(0,23)
-  seed: bool
   perenual_api_key: password?

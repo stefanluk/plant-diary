@@ -12,7 +12,7 @@ const PLANT_FIELDS = [
 const SPECIES_FIELDS = [
   'name', 'latin_name', 'name_nl', 'name_en', 'synonyms', 'water_summer_days', 'water_winter_days',
   'feed_days', 'light_min', 'light_max', 'soil', 'toxic', 'feed_tip', 'repot_tip', 'prune_tip',
-  'description', 'verified', 'source', 'external_id',
+  'description', 'source', 'external_id', 'gbif_key', 'toxic_pets', 'toxic_humans', 'extra',
 ] as const;
 
 function validate(data: Row): void {
@@ -21,7 +21,7 @@ function validate(data: Row): void {
       throw new HttpError(400, `${f} moet een van ${LIGHT_LEVELS.join(', ')} zijn`);
   if (data.soil != null && !(SOILS as readonly string[]).includes(data.soil))
     throw new HttpError(400, `soil moet een van ${SOILS.join(', ')} zijn`);
-  for (const f of ['toxic', 'verified']) if (f in data && data[f] != null) data[f] = data[f] ? 1 : 0;
+  for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (f in data && data[f] != null) data[f] = data[f] ? 1 : 0;
 }
 
 const normalize = (t: string) =>
@@ -86,7 +86,9 @@ export class PlantService {
     return {
       ...r,
       toxic_own: r.toxic,
-      toxic: r.toxic ?? r.species_toxic ?? 0,
+      toxic_pets: r.toxic ?? r.species_toxic_pets ?? r.species_toxic ?? 0,
+      toxic_humans: r.toxic ?? r.species_toxic_humans ?? r.species_toxic ?? 0,
+      toxic: r.toxic ?? (r.species_toxic_pets || r.species_toxic_humans || r.species_toxic ? 1 : 0),
       soil_effective: r.soil ?? r.species_soil ?? null,
       light_status: lightStatus(r.light_level, r.light_min, r.light_max),
       next_water: next,
@@ -96,7 +98,7 @@ export class PlantService {
 
   private plantSelect = `SELECT p.*, s.name AS species_name, s.latin_name, s.name_nl, s.name_en,
     s.water_summer_days, s.water_winter_days, s.feed_days, s.light_min, s.light_max,
-    s.toxic AS species_toxic, s.soil AS species_soil
+    s.toxic AS species_toxic, s.toxic_pets AS species_toxic_pets, s.toxic_humans AS species_toxic_humans, s.soil AS species_soil
     FROM plants p LEFT JOIN species s ON s.id = p.species_id`;
 
   listPlants(): Row[] {
@@ -153,7 +155,7 @@ export class PlantService {
     if (id) {
       this.getSpecies(id);
       const cols = Object.keys(data);
-      // Marks the entry as customised so a catalog refresh never overwrites it.
+      // Marks the entry as customised by the user.
       uniqueGuard(() =>
         this.db
           .prepare(`UPDATE species SET ${[...cols.map((c) => `${c} = ?`), 'user_edited = 1'].join(',')} WHERE id = ?`)
@@ -194,7 +196,7 @@ export class PlantService {
     scored.sort((a, b) => a.score - b.score || a.row.id - b.row.id);
     return scored.slice(0, limit).map(({ row }) => ({
       id: row.id, name: row.name, latin_name: row.latin_name, name_nl: row.name_nl, name_en: row.name_en,
-      source: row.source, verified: row.verified,
+      source: row.source,
     }));
   }
 

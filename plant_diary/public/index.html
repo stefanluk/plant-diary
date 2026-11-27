@@ -120,6 +120,19 @@ async function showList() {
   document.querySelectorAll('.card').forEach((c) => c.onclick = () => showPlant(c.dataset.id));
 }
 
+const EXTRA = { family:'Familie', type:'Type', cycle:'Levenscyclus', origin:'Herkomst', care_level:'Onderhoudsniveau', growth_rate:'Groeisnelheid',
+  maintenance:'Onderhoud', watering:'Water (Perenual)', sunlight:'Licht (Perenual)', soil:'Grond (Perenual)', indoor:'Binnenshuis', tropical:'Tropisch',
+  drought_tolerant:'Droogtetolerant', propagation:'Vermeerderen', pests:'Gevoelig voor' };
+function extraInfo(s) {
+  let x = {}; try { x = JSON.parse(s.extra || '{}'); } catch {}
+  const rows = Object.entries(EXTRA).filter(([k]) => x[k] != null && x[k] !== '')
+    .map(([k, l]) => `<div><span class="muted">${l}</span><br>${esc(x[k] === true ? 'ja' : x[k] === false ? 'nee' : x[k])}</div>`);
+  return rows.length ? `<details style="margin-top:12px"><summary class="muted">Meer over deze soort</summary><div class="grid" style="margin-top:8px">${rows.join('')}</div></details>` : '';
+}
+function toxicBox(p) {
+  const who = [p.toxic_pets ? 'huisdieren (o.a. katten)' : '', p.toxic_humans ? 'mensen (o.a. kleine kinderen)' : ''].filter(Boolean);
+  return who.length ? `<div class="warnbox">⚠️ Giftig voor ${who.join(' en ')}. Buiten bereik houden.</div>` : '';
+}
 function infoBlock(p) {
   const s = p.species;
   if (!s) return '<div class="card"><h3>Soort-info</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
@@ -128,8 +141,8 @@ function infoBlock(p) {
   const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
     ? `<div class="warnbox">${p.light_status === 'too_bright' ? '☀️ Staat te licht' : '🌑 Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
   return `<div class="card info"><div class="row"><h3>${esc(s.latin_name || s.name)}${s.name_nl ? ' · ' + esc(s.name_nl) : ''}</h3>
-      <span class="badge ${s.verified ? '' : 'warn'}">${s.verified ? 'gecontroleerd' : 'concept'}</span></div>
-    ${mismatch}${p.toxic ? '<div class="warnbox">⚠️ Giftig voor mens en dier. Buiten bereik van katten en kinderen houden.</div>' : ''}
+      </div>
+    ${mismatch}${toxicBox(p)}
     ${s.description ? `<p>${esc(s.description)}</p>` : ''}
     <div class="grid">
       ${tip('💧 Water', water)}
@@ -139,7 +152,8 @@ function infoBlock(p) {
       ${tip('🪴 Verpotten', s.repot_tip)}
       ${tip('✂️ Snoeien', s.prune_tip)}
     </div>
-    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Bewerk soort</button></div></div>`;
+    ${extraInfo(s)}
+    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Bewerk soort</button>${cfg.perenual ? '<button class="sec" id="enrich">Vul lege velden aan (Perenual)</button>' : ''}</div></div>`;
 }
 
 async function showPlant(id) {
@@ -186,6 +200,10 @@ async function showPlant(id) {
     await api('plants/' + id, { method:'PATCH', body:{ light_level: e.target.value || null } }).catch((x) => toast(x.message)); showPlant(id);
   };
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);
+  if ($('#enrich')) $('#enrich').onclick = async () => {
+    const r = await api(`species/${p.species_id}/enrich`, { method:'POST' }).catch((x) => (toast(x.message), null));
+    if (r) { toast(r.note || 'Lege velden aangevuld'); showPlant(p.id); }
+  };
   $('#openlog').onclick = () => {
     const d = modal('Update schrijven', logForm());
     d.querySelector('#log').onsubmit = async (e) => {
@@ -231,16 +249,16 @@ function editSpecies(p) {
     <label>Licht minimaal</label><select name="light_min">${opt(LIGHT, s.light_min, '–')}</select>
     <label>Licht maximaal</label><select name="light_max">${opt(LIGHT, s.light_max, '–')}</select>
     <label>Grondsoort</label><select name="soil">${opt(SOIL, s.soil, '–')}</select>
-    <label>Giftig</label><select name="toxic"><option value="0" ${!s.toxic ? 'selected' : ''}>Nee</option><option value="1" ${s.toxic ? 'selected' : ''}>Ja</option></select>
+    <label>Giftig voor huisdieren</label><select name="toxic_pets"><option value="">Onbekend</option><option value="0" ${s.toxic_pets === 0 ? 'selected' : ''}>Nee</option><option value="1" ${s.toxic_pets === 1 ? 'selected' : ''}>Ja</option></select>
+    <label>Giftig voor mensen</label><select name="toxic_humans"><option value="">Onbekend</option><option value="0" ${s.toxic_humans === 0 ? 'selected' : ''}>Nee</option><option value="1" ${s.toxic_humans === 1 ? 'selected' : ''}>Ja</option></select>
     ${txt('feed_tip', 'Voeding')}${txt('repot_tip', 'Verpotten')}${txt('prune_tip', 'Snoeien')}${txt('description', 'Omschrijving')}
-    <label><input type="checkbox" name="verified" style="width:auto;margin-right:8px" ${s.verified ? 'checked' : ''}>Gecontroleerd door mij</label>
     <div class="actions"><button>Opslaan</button><button type="button" class="sec" id="cancel">Annuleren</button></div>
   </form></div>`;
   $('#cancel').onclick = () => showPlant(p.id);
   $('#sp').onsubmit = async (e) => {
     e.preventDefault();
-    const f = new FormData(e.target); const body = Object.fromEntries(f);
-    body.verified = f.has('verified') ? 1 : 0;
+    const body = Object.fromEntries(new FormData(e.target));
+    for (const k of ['toxic_pets', 'toxic_humans']) if (body[k] === '') body[k] = null;
     const r = await api('species/' + s.id, { method:'PATCH', body }).catch((x) => toast(x.message));
     if (r) showPlant(p.id);
   };
@@ -256,7 +274,7 @@ $('#add').onclick = () => {
     <input id="q" autocomplete="off" placeholder="bijv. sanse, monstera, orchidee">
     <div id="sugg"></div>
     <div id="chosen" class="muted"></div>
-    <div class="actions" style="margin-bottom:12px"><button type="button" class="sec" id="own">Eigen soort aanmaken</button>${cfg.perenual ? '<button type="button" class="sec" id="online">🌐 Zoek online</button>' : ''}</div>
+    <div class="actions" style="margin-bottom:12px"><button type="button" class="sec" id="own">Eigen soort aanmaken</button></div>
     <label>Naam van de plant</label><input name="name" required>
     <label>Standplaats</label><select name="light_level">${opt(LIGHT, '', '– kies –')}</select>
     <label>Kamer</label><input name="room">
@@ -265,31 +283,29 @@ $('#add').onclick = () => {
     <div class="actions"><button>Toevoegen</button><button type="button" class="sec" id="cancel">Annuleren</button></div>
   </form></div>`;
   const form = $('#new');
-  const pick = (s) => {
+  const pick = (s, note) => {
     chosen = s; $('#sugg').innerHTML = '';
-    $('#chosen').innerHTML = `Gekozen: <strong>${esc(s.latin_name || s.name)}</strong>${s.name_nl ? ' · ' + esc(s.name_nl) : ''}`;
+    $('#chosen').innerHTML = `Gekozen: <strong>${esc(s.latin_name || s.name)}</strong>${s.name_nl ? ' · ' + esc(s.name_nl) : ''}${note ? `<br>${esc(note)}` : ''}`;
     if (!form.name.value) form.name.value = s.name_nl || s.latin_name || s.name;
   };
-  const render = (items, renderLabel) => {
-    $('#sugg').innerHTML = items.map((s, i) => `<button type="button" class="sugg" data-i="${i}">${renderLabel(s)}</button>`).join('')
-      || '<div class="muted" style="margin-bottom:8px">Geen resultaten.</div>';
-    document.querySelectorAll('.sugg').forEach((b) => b.onclick = () => choose(items[b.dataset.i]));
+  const choose = async (it) => {
+    if (it.id) return pick(it);
+    $('#chosen').textContent = 'Soortgegevens ophalen…';
+    try { const r = await api('species/resolve', { method:'POST', body: it }); pick(r.species, r.note); }
+    catch (x) { $('#chosen').textContent = ''; toast(x.message); }
   };
-  let choose = pick;
-  const label = (s) => `<strong>${esc(s.latin_name || s.name)}</strong> <span class="muted">${esc([s.name_nl, s.name_en].filter(Boolean).join(' · '))}</span>${s.verified ? '' : ''}`;
+  const label = (s) => `<strong>${esc(s.latin_name || s.name)}</strong> <span class="muted">${esc([s.name_nl, s.name_en].filter(Boolean).join(' · '))}${s.id ? ' · opgeslagen' : ''}</span>`;
   $('#q').oninput = (e) => {
     clearTimeout(timer); const q = e.target.value.trim();
-    if (q.length < 2) { $('#sugg').innerHTML = ''; return; }
-    timer = setTimeout(async () => { choose = pick; render(await api('species/search?q=' + encodeURIComponent(q)), label); }, 250);
-  };
-  if ($('#online')) $('#online').onclick = async () => {
-    const q = $('#q').value.trim();
-    if (q.length < 2) return toast('Typ eerst minimaal 2 tekens');
-    try {
-      const items = await api('species/search-online', { method:'POST', body:{ q } });
-      choose = async (it) => pick(await api('species/from-online', { method:'POST', body:{ external_id: it.external_id } }).catch((x) => (toast(x.message), chosen)));
-      render(items, (s) => `<strong>${esc(s.latin_name)}</strong> <span class="muted">${esc(s.name_en || '')} · online</span>`);
-    } catch (x) { toast(x.message); }
+    if (q.length < 3) { $('#sugg').innerHTML = ''; return; }
+    timer = setTimeout(async () => {
+      const r = await api('names/suggest?q=' + encodeURIComponent(q)).catch((x) => (toast(x.message), null));
+      if (!r || $('#q').value.trim() !== q) return;
+      const items = [...r.local, ...r.online];
+      $('#sugg').innerHTML = items.map((s, i) => `<button type="button" class="sugg" data-i="${i}">${label(s)}</button>`).join('')
+        || `<div class="muted" style="margin-bottom:8px">Geen resultaten${r.offline ? ' (online zoeken niet bereikbaar)' : ''}.</div>`;
+      document.querySelectorAll('.sugg').forEach((b) => b.onclick = () => choose(items[b.dataset.i]));
+    }, 300);
   };
   $('#own').onclick = async () => {
     const name = $('#q').value.trim();

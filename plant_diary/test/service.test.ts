@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { PlantService } from '../src/service.js';
-import { seedIfEmpty } from '../src/seed.js';
 import { nextWater, seasonOf } from '../src/schedule.js';
 
 const base = { lastWatered: null, nextOverride: null, intervalOverrideDays: null, speciesSummerDays: 10, speciesWinterDays: 20 };
@@ -26,13 +25,11 @@ test('service: watering logs, back-dating, due list, toxic fallback', () => {
   const db = openDb(':memory:');
   const now = new Date(2026, 6, 15);
   const svc = new PlantService(db, () => now);
-  assert.equal(seedIfEmpty(db, svc), true);
-  assert.equal(seedIfEmpty(db, svc), false);
-
-  const plants = svc.listPlants();
-  assert.equal(plants.length, 10);
-  const lepel = plants.find((p) => p.name === 'Lepelplant')!;
+  const sp = svc.upsertSpecies({ name: 'Lepelplant', water_summer_days: 5, water_winter_days: 10, toxic_pets: 1, toxic_humans: 0 });
+  const lepel = svc.createPlant({ name: 'Lepelplant', species_id: sp.id });
   assert.equal(lepel.toxic, 1);
+  assert.equal(lepel.toxic_pets, 1);
+  assert.equal(lepel.toxic_humans, 0);
   assert.equal(lepel.next_water, null);
 
   let p = svc.addLog(lepel.id, { type: 'water', date: '2026-07-05' });
@@ -51,8 +48,8 @@ test('service: watering logs, back-dating, due list, toxic fallback', () => {
 });
 
 import { lightStatus } from '../src/options.js';
-import { syncCatalog, CATALOG } from '../src/catalog.js';
-import { mapDetails, mapSunlight, Perenual } from '../src/perenual.js';
+import { NameSearch } from '../src/names.js';
+import { mapDetails, mapSunlight, scrub, Perenual } from '../src/perenual.js';
 
 test('light status compares placement with species range', () => {
   assert.equal(lightStatus('full_sun', 'half_shade', 'indirect'), 'too_bright');
@@ -62,29 +59,10 @@ test('light status compares placement with species range', () => {
   assert.equal(lightStatus(null, 'shade', 'full_sun'), null);
 });
 
-test('catalog sync is idempotent and respects user edits; search ranks and finds synonyms', () => {
-  const db = openDb(':memory:');
-  const svc = new PlantService(db);
-  assert.equal(syncCatalog(db).added, CATALOG.length);
-  assert.equal(syncCatalog(db).added, 0);
-  const found = svc.searchSpecies('sanse');
-  assert.equal(found[0].latin_name, 'Dracaena trifasciata');
-  assert.ok(found.length <= 6);
-  assert.ok(svc.searchSpecies('Orchidee').some((s) => s.latin_name === 'Phalaenopsis'));
-  assert.equal(svc.searchSpecies('x').length, 0);
-
-  svc.upsertSpecies({ name_nl: 'Mijn sansevieria' }, Number(found[0].id));
-  db.prepare("UPDATE species SET name_nl = 'zzz' WHERE latin_name = 'Monstera deliciosa'").run();
-  syncCatalog(db);
-  assert.equal(svc.getSpecies(Number(found[0].id)).name_nl, 'Mijn sansevieria');
-  assert.equal(svc.searchSpecies('monstera deliciosa')[0].name_nl, 'Gatenplant');
-});
-
 test('plant light mismatch, validation and species name clash', () => {
   const db = openDb(':memory:');
   const svc = new PlantService(db);
-  syncCatalog(db);
-  const sp = svc.searchSpecies('Spathiphyllum')[0];
+  const sp = svc.upsertSpecies({ name: 'Lepel', light_min: 'shade', light_max: 'half_shade' });
   const p = svc.createPlant({ name: 'Lepel', species_id: sp.id, light_level: 'full_sun' });
   assert.equal(p.light_status, 'too_bright');
   assert.equal(svc.updatePlant(p.id, { light_level: 'half_shade' }).light_status, 'ok');
@@ -95,34 +73,71 @@ test('plant light mismatch, validation and species name clash', () => {
   assert.equal(svc.listPlants().length, 0);
 });
 
-test('Perenual mapping, free-tier filtering, caching and quota', async () => {
+test('Perenual mapping and key scrubbing', () => {
   assert.deepEqual(mapSunlight(['full sun', 'part shade']), { min: 'half_shade', max: 'full_sun' });
   const m = mapDetails({ id: 7, common_name: 'Rubber', scientific_name: ['Ficus elastica'], watering: 'Average',
-    sunlight: ['part sun/part shade'], poisonous_to_pets: 1, poisonous_to_humans: 0, description: 'Upgrade Plans To Premium' });
-  assert.equal(m.water_summer_days, 10);
-  assert.equal(m.toxic, 1);
+    watering_general_benchmark: { value: '"7-10"', unit: 'days' }, sunlight: ['part sun/part shade'], soil: [' Well-drained'],
+    pruning_month: ['March'], pruning_count: { amount: 1, interval: 'yearly' }, poisonous_to_pets: 1, poisonous_to_humans: 0,
+    description: 'Upgrade Plans To Premium', care_level: 'Medium' });
+  assert.equal(m.water_summer_days, 9);
+  assert.equal(m.toxic_pets, 1);
+  assert.equal(m.toxic_humans, 0);
+  assert.equal(m.soil, 'airy');
   assert.equal(m.description, null);
+  assert.match(m.prune_tip, /maart/);
+  assert.equal(JSON.parse(m.extra).care_level, 'Medium');
+  assert.equal(JSON.stringify(scrub({ a: { full_url: 'https://x/y?key=SECRET', ok: 'fine' } })).includes('SECRET'), false);
+});
 
+test('resolve: Perenual once, then local; premium and keyless fall back to names only', async () => {
   const db = openDb(':memory:');
   const svc = new PlantService(db);
-  let calls = 0;
+  const urls: string[] = [];
   const fetcher = async (url: string) => {
-    calls++;
+    urls.push(url);
     const body = url.includes('/species-list')
-      ? { data: [{ id: 7, common_name: 'Rubber', scientific_name: ['Ficus elastica'] }, { id: 5000, common_name: 'Premium', scientific_name: ['X y'] }] }
-      : { id: 7, common_name: 'Rubber', scientific_name: ['Ficus elastica'], watering: 'Minimum', sunlight: ['full sun'] };
+      ? { data: [{ id: 7, scientific_name: ['Ficus elastica'] }, { id: 5000, scientific_name: ['Monstera deliciosa'] }] }
+      : { id: 7, common_name: 'Rubber', scientific_name: ['Ficus elastica'], watering: 'Minimum', sunlight: ['full sun'],
+          hardiness_location: { full_url: 'https://p/x?key=SECRET' } };
     return { ok: true, status: 200, json: async () => body };
   };
   const online = new Perenual(db, svc, 'k', fetcher);
-  const res = await online.search('ficus');
-  assert.equal(res.length, 1);
-  await online.search('Ficus');
-  assert.equal(calls, 1);
-  const sp = await online.importSpecies(res[0].external_id);
-  assert.equal(sp.water_summer_days, 21);
-  await online.importSpecies(res[0].external_id);
-  assert.equal(calls, 2);
-  await assert.rejects(new Perenual(db, svc, undefined, fetcher).search('rose'), /sleutel/);
+  const first = await online.resolve({ latin_name: 'Ficus elastica', name_nl: 'Rubberplant', gbif_key: 1 });
+  assert.equal(first.created, true);
+  assert.equal(first.species.water_summer_days, 21);
+  assert.equal(first.species.name_nl, 'Rubberplant');
+  assert.equal(urls.length, 2);
+  const again = await online.resolve({ latin_name: 'ficus elastica', gbif_key: 1 });
+  assert.equal(again.created, false);
+  assert.equal(urls.length, 2);
+  assert.equal(JSON.stringify(db.prepare('SELECT * FROM species').all()).includes('SECRET'), false);
+
+  const premium = await online.resolve({ latin_name: 'Monstera deliciosa', name_nl: 'Gatenplant' });
+  assert.equal(premium.species.water_summer_days, null);
+  assert.match(premium.note ?? '', /betaald/);
+  assert.equal(urls.length, 3);
+
+  const keyless = await new Perenual(db, svc, undefined, fetcher).resolve({ latin_name: 'Rosa rubiginosa' });
+  assert.equal(keyless.created, true);
+  assert.match(keyless.note ?? '', /sleutel/);
+  assert.equal(urls.length, 3);
+
+  svc.upsertSpecies({ water_summer_days: 4 }, Number(premium.species.id));
+  const e = await online.enrich(Number(first.species.id));
+  assert.equal(e.species.water_summer_days, 21);
+});
+
+test('name suggestions merge GBIF and Wikidata and survive one source failing', async () => {
+  const fetcher = async (url: string) => {
+    if (url.includes('gbif')) return { ok: true, status: 200, json: async () => [{ key: 9, canonicalName: 'Dracaena trifasciata' }] };
+    if (url.includes('wbsearchentities')) return { ok: true, status: 200, json: async () => ({ search: [{ id: 'Q1' }] }) };
+    return { ok: true, status: 200, json: async () => ({ entities: { Q1: { claims: { P225: [{ mainsnak: { datavalue: { value: 'Dracaena trifasciata' } } }] },
+      labels: { nl: { value: 'Vrouwentongen' }, en: { value: 'Snake plant' } } } } }) };
+  };
+  const hits = await new NameSearch(fetcher).suggest('sanse');
+  assert.deepEqual(hits, [{ latin_name: 'Dracaena trifasciata', gbif_key: 9, name_nl: 'Vrouwentongen', name_en: 'Snake plant' }]);
+  const gbifDown = async (url: string) => (url.includes('gbif') ? { ok: false, status: 500, json: async () => ({}) } : fetcher(url));
+  assert.equal((await new NameSearch(gbifDown).suggest('sanse'))[0].name_nl, 'Vrouwentongen');
 });
 
 test('ingress-only mode rejects other clients; input is validated', async () => {

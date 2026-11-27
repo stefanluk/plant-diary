@@ -14,13 +14,13 @@ Environment variables (the add-on's `run.sh` sets these from the add-on options)
 
 ## Layout
 
-- `plant_diary/src` – Fastify server (`server.ts`), business logic (`service.ts`), SQLite schema/migrations (`db.ts`), species catalog (`catalog.ts`), Perenual client (`perenual.ts`), MQTT/notification bridge (`ha.ts`).
+- `plant_diary/src` – Fastify server (`server.ts`), business logic (`service.ts`), SQLite schema/migrations (`db.ts`), name search via GBIF/Wikidata (`names.ts`), Perenual client (`perenual.ts`), MQTT/notification bridge (`ha.ts`).
 - `plant_diary/public/index.html` – single-file vanilla JS UI.
 - `plant_diary/config.yaml` – add-on manifest; bump `version` to ship an update.
 
 ## API
 
-`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST /api/plants/:id/logs` (JSON or multipart with `photo`), `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/species/search?q=`, `POST /api/species/search-online` and `/api/species/from-online` (Perenual), `GET /api/config`, `GET /api/due`.
+`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST /api/plants/:id/logs` (JSON or multipart with `photo`), `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/names/suggest?q=` (local + GBIF/Wikidata), `POST /api/species/resolve` (local first, otherwise one Perenual lookup), `POST /api/species/:id/enrich` (fill empty fields from Perenual), `GET /api/config`, `GET /api/due`.
 
 ## Guidelines
 

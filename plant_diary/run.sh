@@ -6,7 +6,6 @@ export NOTIFY_SERVICE="$(bashio::config 'notify_service')"
 export NOTIFY_HOUR="$(bashio::config 'notify_hour')"
 export PERENUAL_API_KEY="$(bashio::config 'perenual_api_key')"
 export INGRESS_ONLY=true
-export SEED="$(bashio::config 'seed')"
 if bashio::services.available mqtt; then
   export MQTT_URL="mqtt://$(bashio::services mqtt host):$(bashio::services mqtt port)"
   export MQTT_USER="$(bashio::services mqtt username)"

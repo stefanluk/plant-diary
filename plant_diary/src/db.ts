@@ -74,6 +74,11 @@ const SPECIES_COLUMNS: Record<string, string> = {
   verified: 'INTEGER NOT NULL DEFAULT 0',
   external_id: 'TEXT',
   user_edited: 'INTEGER NOT NULL DEFAULT 0',
+  gbif_key: 'INTEGER',
+  toxic_pets: 'INTEGER',
+  toxic_humans: 'INTEGER',
+  extra: 'TEXT',
+  raw_json: 'TEXT',
 };
 const PLANT_COLUMNS: Record<string, string> = { light_level: 'TEXT', toxic: 'INTEGER' };
 
@@ -91,11 +96,16 @@ function addColumns(db: DatabaseSync, table: string, cols: Record<string, string
 
 function migrate(db: DatabaseSync): void {
   // The single "toxic" flag replaces the separate cat/child flags; carry the old values over once.
-  if (addColumns(db, 'species', SPECIES_COLUMNS).includes('toxic'))
-    db.exec('UPDATE species SET toxic = MAX(toxic_cat, toxic_child)');
+  const added = addColumns(db, 'species', SPECIES_COLUMNS);
+  if (added.includes('toxic')) db.exec('UPDATE species SET toxic = MAX(toxic_cat, toxic_child)');
+  // The single flag used to mean "toxic to people and pets"; carry it over to both new flags once.
+  if (added.includes('toxic_pets')) db.exec('UPDATE species SET toxic_pets = toxic, toxic_humans = toxic WHERE toxic IS NOT NULL');
+  // Earlier cache entries must never contain an API key.
+  db.exec("DELETE FROM online_cache WHERE json LIKE '%key=%'");
   if (addColumns(db, 'plants', PLANT_COLUMNS).includes('toxic'))
     db.exec(`UPDATE plants SET toxic = MAX(COALESCE(toxic_cat, 0), COALESCE(toxic_child, 0))
              WHERE toxic_cat IS NOT NULL OR toxic_child IS NOT NULL`);
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS species_gbif ON species(gbif_key) WHERE gbif_key IS NOT NULL');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS species_external ON species(external_id) WHERE external_id IS NOT NULL');
 }
 
