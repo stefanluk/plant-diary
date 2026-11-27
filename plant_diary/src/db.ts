@@ -100,6 +100,10 @@ function migrate(db: DatabaseSync): void {
   if (added.includes('toxic')) db.exec('UPDATE species SET toxic = MAX(toxic_cat, toxic_child)');
   // The single flag used to mean "toxic to people and pets"; carry it over to both new flags once.
   if (added.includes('toxic_pets')) db.exec('UPDATE species SET toxic_pets = toxic, toxic_humans = toxic WHERE toxic IS NOT NULL');
+  // Soil types were reduced to four; map the old values.
+  for (const t of ['species', 'plants'])
+    db.exec(`UPDATE ${t} SET soil = CASE soil WHEN 'airy' THEN 'aroid' WHEN 'orchid_bark' THEN 'orchid' WHEN 'moist' THEN 'standard' ELSE soil END
+      WHERE soil IN ('airy', 'orchid_bark', 'moist')`);
   // The online cache of earlier versions may contain an API key; it is no longer used.
   db.exec('DROP TABLE IF EXISTS online_cache');
   if (addColumns(db, 'plants', PLANT_COLUMNS).includes('toxic'))

@@ -2,7 +2,7 @@
 export const LIGHT_LEVELS = ['shade', 'half_shade', 'indirect', 'full_sun'] as const;
 export type LightLevel = (typeof LIGHT_LEVELS)[number];
 
-export const SOILS = ['cactus', 'airy', 'standard', 'moist', 'orchid_bark'] as const;
+export const SOILS = ['standard', 'cactus', 'aroid', 'orchid'] as const;
 export type Soil = (typeof SOILS)[number];
 
 export type LightStatus = 'ok' | 'too_dark' | 'too_bright';
