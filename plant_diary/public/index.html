@@ -83,7 +83,7 @@ const opt = (map, sel, blank) => (blank ? `<option value="">${blank}</option>` :
   Object.entries(map).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
 
 function statusBadge(p, withDate = true) {
-  if (p.days_overdue === null) return '<span class="badge">nog niet water gegeven</span>';
+  if (p.days_overdue === null) return '<span class="badge">nog geen water gegeven</span>';
   if (p.days_overdue > 0) return `<span class="badge over">${p.days_overdue}d te laat</span>`;
   if (p.days_overdue === 0) return '<span class="badge warn">vandaag</span>';
   return withDate ? `<span class="badge">${fmt(p.next_water)}</span>` : '';
@@ -104,14 +104,15 @@ const lightRange = (s) => !s.light_min && !s.light_max ? '–'
 
 /** Summary block shared by the overview cards and the plant page; `detail` adds schedule dates and an edit link. */
 function plantBlock(p, detail = false) {
-  const place = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
+  const where = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
+  const place = [where, p.light_level ? `(${LIGHT[p.light_level]})` : ''].filter(Boolean).join(' ');
   const dates = detail ? [['Laatst water', p.last_watered], ['Voeding', p.last_fed], ['Verpot', p.last_repotted]]
     .filter(([, d]) => d).map(([l, d]) => `<div class="muted">${l}: ${fmt(d)}</div>`).join('') : '';
   const line = (html) => (html ? `<div class="muted">${html}</div>` : '');
   return `<div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : statusBadge(p)}</div>
     ${line(speciesLine(p))}
     ${detail ? `<div style="margin-top:8px">Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</div>` : ''}
-    ${dates}${line(place)}${line(p.pot ? 'Pot: ' + (isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm') : '')}${line(p.light_level ? 'Standplaats: ' + LIGHT[p.light_level] : '')}
+    ${dates}${line(place)}${line(p.pot ? 'Pot: ' + (isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm') : '')}
     ${line(lightBadge(p))}`;
 }
 
@@ -168,7 +169,6 @@ async function showPlant(id) {
   const editForm = `<form id="edit">
         <label>Naam</label><input name="name" value="${esc(p.name)}">
         <label>Soort</label><select name="species_id"><option value="">–</option>${opts}</select>
-        <label>Waterinterval overschrijven (dagen, leeg = soort/seizoen)</label><input name="water_interval_override" type="number" min="1" value="${p.water_interval_override ?? ''}">
         <label>Volgende water handmatig (datum)</label><input name="next_water_override" type="date" value="${p.next_water_override ?? ''}">
         <label>Standplaats (waar staat de plant nu?)</label><select name="light_level">${opt(LIGHT, p.light_level, '– kies –')}</select>
         <label>Kamer</label><input name="room" value="${esc(p.room)}">
@@ -176,7 +176,7 @@ async function showPlant(id) {
         ${p.light ? `<label>Eerdere lichtnotitie</label><input name="light" value="${esc(p.light)}">` : ''}
         <label>Pot (diameter in cm)</label><input name="pot" type="number" min="1" max="200" step="0.5" value="${isNaN(p.pot) ? '' : p.pot ?? ''}">
         <label>Aangeschaft</label><input name="acquired" type="date" value="${p.acquired ?? ''}">
-        <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">🗑 Plant verwijderen</button></div>
+        <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">Plant verwijderen</button></div>
       </form>`;
   $('#app').innerHTML = `
     <div class="cols"><div>
@@ -200,12 +200,12 @@ async function showPlant(id) {
     };
   };
   $('#openedit').onclick = () => {
-    const d = modal('Schema & gegevens', editForm);
+    const d = modal('Plant aanpassen', editForm);
     d.querySelector('#edit').onsubmit = async (e) => {
       e.preventDefault(); const body = Object.fromEntries(new FormData(e.target));
       await api('plants/' + id, { method:'PATCH', body }).catch((x) => toast(x.message)); d.close(); showPlant(id);
     };
-    armDelete(d.querySelector('#delplant'), '🗑 Plant verwijderen', async () => {
+    armDelete(d.querySelector('#delplant'), 'Plant verwijderen', async () => {
       await api('plants/' + id, { method:'DELETE' }).catch((x) => toast(x.message)); d.close(); showList();
     });
   };
