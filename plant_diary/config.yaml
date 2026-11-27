@@ -1,5 +1,5 @@
 name: Plantendagboek
-version: "0.8.4"
+version: "0.8.5"
 slug: plant_diary
 description: Houseplant diary and watering schedule with MQTT sensors and push reminders
 arch: [amd64, aarch64]

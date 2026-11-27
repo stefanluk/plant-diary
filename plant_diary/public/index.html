@@ -29,7 +29,7 @@
   .card[data-id]:hover { border-color:#3a4553; }
   h3 { margin:0 0 10px; font-weight:600; font-size:15px; }
   h3.ttl { margin:0; font-size:18px; }
-  .badge.mute { background:none; border-color:var(--border); color:var(--text2); }
+  .badge.toxic { background:rgba(234,114,135,.08); border-color:rgba(234,114,135,.3); color:#d98a99; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
   .badge { font-size:12px; padding:1px 8px; border-radius:6px; background:var(--raised); border:1px solid var(--border); margin-left:4px; white-space:nowrap; }
   .badge.warn { background:rgba(227,179,65,.12); border-color:rgba(227,179,65,.35); color:var(--warn); }
@@ -96,7 +96,6 @@ function modal(title, html) {
   d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
   d.querySelector('[data-x]').onclick = () => d.close(); d.showModal(); return d;
 }
-const toxic = (p) => (p.toxic ? '<span class="badge mute">giftig</span>' : '');
 const lightBadge = (p) => p.light_status === 'too_bright' ? '<span class="badge warn">☀️ te licht</span>'
   : p.light_status === 'too_dark' ? '<span class="badge warn">🌑 te donker</span>' : '';
 const speciesLine = (p) => [p.latin_name || p.species_name, p.name_nl].filter(Boolean).map(esc).join(' · ');
@@ -113,7 +112,7 @@ function plantBlock(p, detail = false) {
     ${line(speciesLine(p))}
     ${detail ? `<div style="margin-top:8px">Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</div>` : ''}
     ${dates}${line(place)}${line(esc(p.pot))}${line(p.light_level ? 'Standplaats: ' + LIGHT[p.light_level] : '')}
-    ${line(lightBadge(p) + toxic(p))}`;
+    ${line(lightBadge(p))}`;
 }
 
 async function showList() {
@@ -133,21 +132,22 @@ async function showList() {
 
 function infoBlock(p) {
   const s = p.species;
-  if (!s) return '<div class="card"><h3 class="ttl">Plantverzorging</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
+  if (!s) return '<div class="card"><h3 class="ttl">Informatie &amp; verzorging</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
   const tip = (label, v) => `<div><span class="muted">${label}</span><br>${v ? esc(v) : '<span class="muted">nog niet ingevuld</span>'}</div>`;
   const water = s.water_summer_days ? `elke ${s.water_summer_days} dagen (zomer) · ${s.water_winter_days ?? s.water_summer_days} dagen (winter)` : '';
   const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
-    ? `<div class="warnbox">${p.light_status === 'too_bright' ? '☀️ Staat te licht' : '🌑 Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
-  return `<div class="card info"><div class="row"><h3 class="ttl">Plantverzorging</h3><button class="quiet" id="editspecies">Bewerk</button></div>
+    ? `<div class="warnbox">${p.light_status === 'too_bright' ? 'Staat te licht' : 'Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
+  return `<div class="card info"><div class="row"><h3 class="ttl">Informatie &amp; verzorging</h3><button class="quiet" id="editspecies">Bewerk</button></div>
+    ${p.toxic ? '<div style="margin-bottom:10px"><span class="badge toxic" style="margin-left:0">Giftig voor huisdieren en mensen</span></div>' : ''}
     ${mismatch}
     ${s.description ? `<p>${esc(s.description)}</p>` : ''}
     <div class="grid">
-      ${tip('💧 Water', water)}
-      ${tip('☀️ Standplaats', lightRange(s) === '–' ? '' : lightRange(s))}
-      ${tip('🪴 Grond', SOIL[p.soil_effective])}
-      ${tip('🌿 Voeding', s.feed_tip)}
-      ${tip('🪴 Verpotten', s.repot_tip)}
-      ${tip('✂️ Snoeien', s.prune_tip)}
+      ${tip('Water', water)}
+      ${tip('Standplaats', lightRange(s) === '–' ? '' : lightRange(s))}
+      ${tip('Grond', SOIL[p.soil_effective])}
+      ${tip('Voeding', s.feed_tip)}
+      ${tip('Verpotten', s.repot_tip)}
+      ${tip('Snoeien', s.prune_tip)}
     </div></div>`;
 }
 
@@ -170,10 +170,8 @@ async function showPlant(id) {
         <label>Kamer</label><input name="room" value="${esc(p.room)}">
         <label>Plek</label><input name="location_note" value="${esc(p.location_note)}">
         ${p.light ? `<label>Eerdere lichtnotitie</label><input name="light" value="${esc(p.light)}">` : ''}
-        <label>Grondsoort (leeg = zoals soort)</label><select name="soil">${opt(SOIL, p.soil, 'Zoals soort')}</select>
         <label>Pot</label><input name="pot" value="${esc(p.pot)}">
         <label>Aangeschaft</label><input name="acquired" type="date" value="${p.acquired ?? ''}">
-        <label>Giftig</label><select name="toxic"><option value="">Zoals soort</option><option value="1" ${p.toxic_own == 1 ? 'selected' : ''}>Ja</option><option value="0" ${p.toxic_own === 0 ? 'selected' : ''}>Nee</option></select>
         <div class="actions"><button>Opslaan</button><button type="button" class="danger" id="delplant">🗑 Plant verwijderen</button></div>
       </form>`;
   $('#app').innerHTML = `
@@ -233,6 +231,7 @@ function editSpecies(p) {
     <label>Licht minimaal</label><select name="light_min">${opt(LIGHT, s.light_min, '–')}</select>
     <label>Licht maximaal</label><select name="light_max">${opt(LIGHT, s.light_max, '–')}</select>
     <label>Grondsoort</label><select name="soil">${opt(SOIL, s.soil, '–')}</select>
+    <label>Giftig</label><select name="toxic"><option value="0" ${!(s.toxic_pets || s.toxic_humans) ? 'selected' : ''}>Nee</option><option value="1" ${s.toxic_pets || s.toxic_humans ? 'selected' : ''}>Ja</option></select>
     ${txt('feed_tip', 'Voeding')}${txt('repot_tip', 'Verpotten')}${txt('prune_tip', 'Snoeien')}${txt('description', 'Omschrijving')}
     <div class="actions"><button>Opslaan</button><button type="button" class="sec" id="cancel">Annuleren</button></div>
   </form></div>`;
@@ -240,6 +239,7 @@ function editSpecies(p) {
   $('#sp').onsubmit = async (e) => {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.target));
+    body.toxic_pets = body.toxic_humans = body.toxic; delete body.toxic;
     const r = await api('species/' + s.id, { method:'PATCH', body }).catch((x) => toast(x.message));
     if (r) showPlant(p.id);
   };
