@@ -124,3 +124,17 @@ test('Perenual mapping, free-tier filtering, caching and quota', async () => {
   assert.equal(calls, 2);
   await assert.rejects(new Perenual(db, svc, undefined, fetcher).search('rose'), /sleutel/);
 });
+
+test('ingress-only mode rejects other clients; input is validated', async () => {
+  const { buildApp } = await import('../src/server.js');
+  const svc = new PlantService(openDb(':memory:'));
+  const app = buildApp(svc, undefined, undefined, true);
+  assert.equal((await app.inject({ url: '/api/plants', remoteAddress: '192.168.1.5' })).statusCode, 403);
+  const ok = await app.inject({ url: '/api/plants', remoteAddress: '172.30.32.2' });
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.headers['x-content-type-options'], 'nosniff');
+  const p = svc.createPlant({ name: 'X' });
+  assert.throws(() => svc.addLog(Number(p.id), { type: 'note', photo: '../../etc/passwd' }), /Ongeldige foto/);
+  assert.throws(() => svc.addLog(Number(p.id), { type: 'note', note: 'x'.repeat(5000) }), /te lang/);
+  await app.close();
+});

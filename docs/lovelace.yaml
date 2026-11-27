@@ -1,4 +1,4 @@
-# Voorbeeld-dashboardkaart. Entity-ids hangen af van je plantnamen; pas aan na het installeren.
+# Example dashboard card. Entity ids depend on your plant names; adjust after installing.
 type: vertical-stack
 cards:
   - type: markdown
@@ -11,7 +11,7 @@ cards:
   - type: entities
     title: Volgende water
     entities:
-      - sensor.lepelplant_volgende_water
-      - button.lepelplant_water_gegeven
-      - sensor.ficus_elastica_volgende_water
-      - button.ficus_elastica_water_gegeven
+      - sensor.my_plant_volgende_water
+      - button.my_plant_water_gegeven
+      - sensor.other_plant_volgende_water
+      - button.other_plant_water_gegeven

@@ -21,9 +21,53 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(here, '..', 'public');
 const PHOTO_DIR = join(DATA_DIR, 'photos');
 const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic']);
+// The Supervisor proxies ingress traffic from this address.
+const INGRESS_IP = '172.30.32.2';
 
-export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual) {
-  const app = Fastify({ logger: true });
+/** Checks the file signature so a renamed non-image is rejected. */
+export function isImage(head: Buffer): boolean {
+  const ascii = (a: number, b: number) => head.subarray(a, b).toString('latin1');
+  return (
+    (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) ||
+    ascii(0, 8) === '\x89PNG\r\n\x1a\n' ||
+    (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') ||
+    ascii(4, 8) === 'ftyp'
+  );
+}
+
+async function readHead(stream: NodeJS.ReadableStream, n: number): Promise<{ head: Buffer; rest: AsyncIterable<Buffer> }> {
+  const it = (stream as AsyncIterable<Buffer>)[Symbol.asyncIterator]();
+  const chunks: Buffer[] = [];
+  let len = 0;
+  while (len < n) {
+    const r = await it.next();
+    if (r.done) break;
+    chunks.push(r.value);
+    len += r.value.length;
+  }
+  const head = Buffer.concat(chunks);
+  async function* rest() {
+    yield head;
+    for (let r = await it.next(); !r.done; r = await it.next()) yield r.value;
+  }
+  return { head: head.subarray(0, n), rest: rest() };
+}
+
+export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual, ingressOnly = false) {
+  const app = Fastify({ logger: true, bodyLimit: 1024 * 1024 });
+  app.addHook('onRequest', async (req, reply) => {
+    if (!ingressOnly) return;
+    const ip = req.ip.replace(/^::ffff:/, '');
+    if (ip !== INGRESS_IP && ip !== '127.0.0.1' && ip !== '::1') return reply.code(403).send({ error: 'Alleen via Home Assistant' });
+  });
+  app.addHook('onSend', async (_req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header(
+      'Content-Security-Policy',
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'",
+    );
+  });
   mkdirSync(PHOTO_DIR, { recursive: true });
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024 } });
   app.register(fastifyStatic, { root: PUBLIC_DIR });
@@ -57,7 +101,12 @@ export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual) {
           const ext = extname(part.filename).toLowerCase();
           if (!PHOTO_EXT.has(ext)) throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
           const name = `${randomUUID()}${ext}`;
-          await pipeline(part.file, createWriteStream(join(PHOTO_DIR, name)));
+          const { head, rest } = await readHead(part.file, 12);
+          if (!isImage(head)) {
+            part.file.resume();
+            throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
+          }
+          await pipeline(rest, createWriteStream(join(PHOTO_DIR, name)));
           body.photo = name;
         } else body[part.fieldname] = part.value;
       }
@@ -119,7 +168,7 @@ async function main() {
     if (now.getHours() >= hour) void ha.notifyDue(toISODate(now));
   }, 15 * 60_000);
 
-  await buildApp(svc, ha, online).listen({ port: PORT, host: '0.0.0.0' });
+  await buildApp(svc, ha, online, process.env.INGRESS_ONLY === 'true').listen({ port: PORT, host: '0.0.0.0' });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) void main();

@@ -36,8 +36,31 @@ function uniqueGuard<T>(fn: () => T): T {
   }
 }
 
+const MAX_TEXT = 2000;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const PHOTO_NAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|heic)$/;
+
+function checkText(v: unknown, field: string): void {
+  if (typeof v === 'string' && v.length > MAX_TEXT) throw new HttpError(400, `${field} is te lang (max ${MAX_TEXT} tekens)`);
+}
+
 const pick = (src: Row, fields: readonly string[]) =>
-  Object.fromEntries(fields.filter((f) => f in src).map((f) => [f, src[f] === '' ? null : src[f]]));
+  Object.fromEntries(
+    fields
+      .filter((f) => f in src)
+      .map((f) => {
+        checkText(src[f], f);
+        const date = /^(acquired|last_watered|next_water_override|last_fed|last_repotted)$/.test(f);
+        if (date && src[f] && !ISO_DATE.test(String(src[f]))) throw new HttpError(400, `${f} moet YYYY-MM-DD zijn`);
+        return [f, src[f] === '' ? null : src[f]];
+      }),
+  );
+
+function checkLog(body: Row): void {
+  checkText(body.note, 'note');
+  if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, 'date moet YYYY-MM-DD zijn');
+  if (body.photo != null && !PHOTO_NAME.test(String(body.photo))) throw new HttpError(400, 'Ongeldige foto');
+}
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -181,6 +204,7 @@ export class PlantService {
 
   addLog(plantId: number, body: Row): Row {
     this.getPlant(plantId);
+    checkLog(body);
     const type = body.type;
     if (!LOG_TYPES.includes(type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, 'outcome moet good of bad zijn');
@@ -213,6 +237,7 @@ export class PlantService {
   updateLog(plantId: number, logId: number, body: Row): Row {
     const old = this.db.prepare('SELECT * FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
     if (!old) throw new HttpError(404, 'Bericht niet gevonden');
+    checkLog({ ...body, photo: undefined });
     if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     const type = body.type ?? old.type;
     const date = body.date || old.date;

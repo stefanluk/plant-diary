@@ -1,52 +1,62 @@
 # Plant Diary (Plantendagboek)
 
-Home Assistant add-on (Node/TypeScript, SQLite) om kamerplanten bij te houden: waterschema per soort (zomer/winter automatisch, per plant overschrijfbaar), dagboek met water/voeding/verpotten/snoeien/notities/foto's en een "werkt/werkt niet"-vlag, giftig-labels voor kat en kind, push-herinneringen en sensoren in HA.
+A Home Assistant add-on to keep track of your houseplants: a watering schedule per species (summer/winter adjusts automatically), a diary with water/feed/repot/prune/notes/photos, light and toxicity info, push reminders and MQTT sensors in Home Assistant.
 
-## Lokaal draaien
+> 🇳🇱 **Samenvatting:** een Home Assistant add-on om kamerplanten bij te houden (waterschema, dagboek met foto's, standplaats, giftigheid, push-herinneringen en sensoren). Installatie: zie hieronder. De interface is in het Nederlands.
 
-```bash
-cd plant_diary
-npm install
-npm run dev          # http://localhost:8099, data in ./data
-npm test
-```
+## Features
 
-## Pushen met token uit `.env`
+- Plant list with the next watering date; the "water given" button only shows when watering is due.
+- Species catalog (~100 common houseplants) with search by Latin, Dutch or English name and synonyms.
+- Fixed light levels (full shade, half shade, indirect light, full sun) and soil types; a warning when a plant stands outside its species' light range.
+- Diary entries with date, note and optional photo; entries can be edited or deleted.
+- Optional online species lookup via [Perenual](https://perenual.com/docs/api) (free API key).
+- Push reminders with a **Water given** action, and sensors/buttons through MQTT discovery.
+- Runs only behind Home Assistant ingress (sidebar panel); no extra port is exposed.
 
-1. `cp .env.example .env` en vul `PUSH_TOKEN` in (fine-grained token van `stefanluk`, alleen deze repo, Contents: Read and write). `.env` staat in `.gitignore`.
-2. Gebruik `scripts/gitx` in plaats van `git` voor commando's die de remote raken: `scripts/gitx push`, `scripts/gitx pull`. Dit gebruikt het token uit `.env` en negeert andere ingelogde accounts (bijv. `gh`).
-3. Gewone `git` in een eigen terminal werkt ook: de repo heeft een lokale credential helper (`scripts/git-credential-env.sh`) voor github.com. Na een verse clone: `git config --local credential.https://github.com.helper '!sh scripts/git-credential-env.sh'`.
+## Installation
 
-Env: `DATA_DIR`, `PORT`, `SEED` (starterplanten bij lege database, standaard `true`), `MQTT_URL`/`MQTT_USER`/`MQTT_PASSWORD`, `NOTIFY_SERVICE` (bijv. `notify.mobile_app_pixel`), `NOTIFY_HOUR`.
+1. In Home Assistant: **Settings → Add-ons → Add-on store → ⋮ → Repositories**, add `https://github.com/stefanluk/plant-diary`.
+2. Install **Plantendagboek**, then open its **Configuration** tab (see options below) and start it.
+3. Open it from the sidebar. On first start, a few example plants are added (turn off with `seed`).
 
-## Installeren in Home Assistant
+### Optional: sensors and buttons (MQTT)
 
-1. Add-on store → ⋮ → Repositories → voeg `https://github.com/stefanluk/plant-diary` toe, installeer "Plantendagboek".
-2. Zet in de add-on-opties `notify_service` op je telefoon, bijv. `notify.mobile_app_<telefoon>`.
-3. Installeer de Mosquitto-add-on en de MQTT-integratie voor sensoren. De add-on pakt de broker automatisch op.
-4. Start en open via "Plantendagboek" in de zijbalk (ingress).
+Install the **Mosquitto broker** add-on and add the **MQTT** integration. Plant Diary detects the broker automatically and creates, per plant, a "next watering" sensor and a "water given" button, plus a summary sensor `Planten water nodig`. A sample dashboard card is in [`docs/lovelace.yaml`](docs/lovelace.yaml).
 
-## In HA
+### Optional: push reminders
 
-- Per plant: `sensor.<plant>_volgende_water` (datum) en `button.<plant>_water_gegeven`.
-- `sensor.planten_water_nodig`: aantal planten dat water nodig heeft, met lijst in attributen.
-- Push: dagelijks vanaf `notify_hour` per plant die water nodig heeft, met actie **Water gegeven**. Die zet "laatst water" op vandaag en herberekent de volgende datum.
-- Dashboard: zie `docs/lovelace.yaml`.
+Set `notify_service` to your phone's notify service, e.g. `notify.mobile_app_<your_phone>` (find it under **Developer tools → Actions**). Each plant that needs water triggers one notification per day from `notify_hour`, with a **Water given** action. Leave it empty to disable reminders.
 
-## Schema
+## Options
 
-Volgende water = laatste water + interval. Interval: plantoverschrijving > soort (zomer apr–sep, winter okt–mrt). Een handmatig gezette volgende datum geldt tot de plant weer water krijgt. Met een datum in het verleden loggen verschuift "laatst water" niet terug.
+| Option | Description |
+|---|---|
+| `notify_service` | Notify service for push reminders. Empty = off. |
+| `notify_hour` | Hour (0–23) from which reminders are sent. |
+| `seed` | Add example plants when the database is empty. |
+| `perenual_api_key` | Optional [Perenual](https://perenual.com/user/developer) API key for the "Zoek online" button. Enter it on the add-on's **Configuration** tab, then restart the add-on. Free tier: 100 requests/day (the add-on stops at 95 and caches results). |
 
-## Soorten (0.3.0)
+## Schedule logic
 
-- Bij "+ Plant" zoek je lokaal (Latijn/NL/EN/synoniemen, max. 6 suggesties) in een startcatalogus van ± 100 kamerplanten. De catalogus is uit algemene kennis samengesteld en staat als **concept** (niet gecontroleerd); controleer en pas aan via "Bewerk soort" en vink "gecontroleerd" aan. Bewerkte soorten worden nooit overschreven door een catalogusupdate.
-- "Zoek online" gebruikt Perenual (optie `perenual_api_key`, gratis tier: 100 calls/dag, alleen soorten met id ≤ 3000). Alleen bij een klik, resultaten worden gecachet en lokaal opgeslagen.
-- Vaste opties: licht (volledige schaduw, halfschaduw, indirect licht, vol zonlicht) en grond (cactus/succulent, doorlatend, standaard, vochtig/humusrijk, orchideeënbast). Staat een plant buiten het lichtbereik van de soort, dan volgt een waarschuwing.
+Next watering = last watered + interval. The interval is the plant's own override, otherwise the species' interval (summer Apr–Sep, winter Oct–Mar). A manually set next date applies until the plant is watered again. Logging a back-dated entry never moves "last watered" backwards.
 
-## API
+## Data and privacy
 
-`GET/POST /api/plants`, `GET/PATCH /api/plants/:id`, `POST /api/plants/:id/logs` (JSON of multipart met `photo`), `DELETE /api/plants/:id/logs/:logId`, `GET/POST/PATCH /api/species`, `GET /api/species/search?q=`, `POST /api/species/search-online` en `/api/species/from-online` (Perenual), `GET /api/config`, `GET /api/due`.
+Data (SQLite database and photos) is stored in the add-on's config folder and included in Home Assistant backups. The only external service is Perenual, and only when you configure a key and press "Zoek online".
 
-## Later
+## Disclaimer
 
-Bodemvochtsensoren, meerdere gebruikers (HA-gebruiker uit ingress-headers).
+The species catalog is compiled from general knowledge and is marked **unverified**. Care tips and especially **toxicity information are indicative only** and not veterinary or medical advice. Check a reliable source (e.g. your vet or a poison control centre) for plants that pets or children can reach. You can correct any species through "Bewerk soort" and mark it as verified.
+
+## Security
+
+- The web UI and API have no login of their own: access is limited to Home Assistant ingress (requests from the Supervisor), so Home Assistant's authentication applies. Do not publish the add-on's port.
+- Uploads are limited to images (checked by file signature) and stored with random names.
+- Responses carry a Content-Security-Policy and other hardening headers.
+
+Found a vulnerability? Please open a private security advisory on GitHub instead of a public issue.
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE).

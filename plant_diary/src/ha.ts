@@ -113,6 +113,7 @@ export class HaBridge {
   /** Send one push per plant per day for plants that are due. */
   async notifyDue(today: string): Promise<void> {
     if (!this.cfg.notifyService || !this.cfg.supervisorToken || !this.cfg.haUrl) return;
+    if (!/^[a-z_]+\.[a-z0-9_]+$/.test(this.cfg.notifyService)) return this.log.error('Ongeldige notify_service');
     const [domain, service] = this.cfg.notifyService.split('.');
     for (const p of this.svc.dueToday()) {
       if (this.notifiedOn.get(p.id) === today) continue;

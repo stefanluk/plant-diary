@@ -74,7 +74,12 @@ export class Perenual {
                 ON CONFLICT(day, service) DO UPDATE SET count = count + 1`)
       .run(day);
     const qs = new URLSearchParams({ ...params, key: this.key });
-    const res = await this.fetcher(`${BASE}${path}?${qs}`);
+    let res;
+    try {
+      res = await this.fetcher(`${BASE}${path}?${qs}`);
+    } catch {
+      throw new HttpError(502, 'Perenual niet bereikbaar');
+    }
     if (!res.ok) throw new HttpError(502, `Perenual gaf status ${res.status}`);
     return res.json();
   }
