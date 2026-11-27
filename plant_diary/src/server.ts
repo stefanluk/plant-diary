@@ -82,7 +82,8 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   });
   mkdirSync(PHOTO_DIR, { recursive: true });
   app.register(multipart, { limits: { fileSize: 15 * 1024 * 1024 } });
-  app.register(fastifyStatic, { root: PUBLIC_DIR, cacheControl: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') });
+  app.register(fastifyStatic, { root: PUBLIC_DIR, cacheControl: false });
+  app.addHook('onSend', async (req, reply) => { if (!req.url.startsWith('/api/') && !req.url.startsWith('/photos/')) reply.header('Cache-Control', 'no-cache'); });
   app.register(fastifyStatic, { root: resolve(PHOTO_DIR), prefix: '/photos/', decorateReply: false });
 
   app.setErrorHandler((err: any, _req, reply) => {
