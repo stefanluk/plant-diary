@@ -39,7 +39,9 @@
   input, select, textarea { width:100%; font:inherit; color:var(--text); background:var(--bg); padding:8px 10px; margin:4px 0 12px; border:1px solid var(--border); border-radius:8px; color-scheme:dark; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary); }
   label { font-size:13px; color:var(--text2); }
-  img.thumb { display:block; width:84px; height:84px; object-fit:cover; border-radius:8px; margin-top:10px; cursor:pointer; border:1px solid var(--border); }
+  .foot { display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-top:10px; }
+  .foot .side { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  img.thumb { display:block; width:84px; height:84px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--border); }
   img.big { display:block; max-width:100%; max-height:80vh; margin:auto; border-radius:8px; }
   .log { padding:12px 16px; }
   .actions { display:flex; gap:8px; margin-top:4px; }
@@ -107,7 +109,7 @@ const lightRange = (s) => !s.light_min && !s.light_max ? '–'
   : s.light_min === s.light_max ? LIGHT[s.light_min] : `${LIGHT[s.light_min] ?? '…'} t/m ${LIGHT[s.light_max] ?? '…'}`;
 
 /** Summary block shared by the overview cards and the plant page; `detail` adds schedule dates and an edit link. */
-function plantBlock(p, detail = false) {
+function plantBlock(p, detail = false, action = '') {
   const where = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
   const place = [where, p.light_level ? `(${LIGHT[p.light_level]})` : ''].filter(Boolean).join(' ');
   const dates = detail ? [['Voeding', p.last_fed], ['Verpot', p.last_repotted]]
@@ -115,10 +117,12 @@ function plantBlock(p, detail = false) {
   const line = (html) => (html ? `<div class="muted">${html}</div>` : '');
   return `<div class="row"><h3 class="ttl">${esc(p.name)}</h3>${detail ? '<button class="quiet" id="openedit">Bewerk</button>' : ''}</div>
     ${line(speciesLine(p))}
-    <div style="margin:6px 0">${statusBadge(p)}</div>
     ${dates}${line(place)}${line(p.pot ? 'Pot: ' + (isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm') : '')}
     ${line(lightBadge(p))}
-    ${p.photo ? `<img class="thumb" ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="">` : ''}`;
+    <div class="foot">
+      <div>${p.photo ? `<img class="thumb" ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="">` : ''}</div>
+      <div class="side">${statusBadge(p)}${action}</div>
+    </div>`;
 }
 
 async function showList() {
@@ -127,8 +131,7 @@ async function showList() {
   plants.sort((a, b) => (b.days_overdue ?? -999) - (a.days_overdue ?? -999));
   $('#app').innerHTML = plants.map((p) => `
     <div class="card" data-id="${p.id}">
-      ${plantBlock(p)}
-      ${needsWater(p) ? `<div class="actions" style="margin-top:8px"><button data-water="${p.id}">💧 Water gegeven</button></div>` : ''}
+      ${plantBlock(p, false, needsWater(p) ? `<button data-water="${p.id}">💧 Water gegeven</button>` : '')}
     </div>`).join('') || '<p>Nog geen planten.</p>';
   document.querySelectorAll('[data-water]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation(); await api(`plants/${b.dataset.water}/logs`, { method:'POST', body:{ type:'water' } }); showList();
