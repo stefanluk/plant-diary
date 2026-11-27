@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { t } from './i18n.js';
 import { LOG_TYPES, OUTCOMES, columnsOf, type Row } from './db.js';
 import { LIGHT_LEVELS, SOILS, lightStatus } from './options.js';
 import { daysOverdue, nextWater, toISODate } from './schedule.js';
@@ -20,12 +21,12 @@ const DATE_FIELDS = new Set(['acquired', 'last_watered', 'next_water_override', 
 function validate(data: Row): void {
   for (const f of ['light_level', 'light_min', 'light_max'])
     if (data[f] != null && !(LIGHT_LEVELS as readonly string[]).includes(data[f]))
-      throw new HttpError(400, `${f} moet een van ${LIGHT_LEVELS.join(', ')} zijn`);
+      throw new HttpError(400, t('{field} must be one of {list}', { field: f, list: LIGHT_LEVELS.join(', ') }));
   if (data.soil != null && !(SOILS as readonly string[]).includes(data.soil))
-    throw new HttpError(400, `soil moet een van ${SOILS.join(', ')} zijn`);
+    throw new HttpError(400, t('{field} must be one of {list}', { field: 'soil', list: SOILS.join(', ') }));
   if (data.pot != null) {
     const cm = Number(String(data.pot).replace(',', '.'));
-    if (!(cm > 0 && cm <= 200)) throw new HttpError(400, 'pot moet een diameter in cm zijn (1-200)');
+    if (!(cm > 0 && cm <= 200)) throw new HttpError(400, t('Pot must be a diameter in cm (1-200)'));
     data.pot = String(cm);
   }
   for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (data[f] != null) data[f] = data[f] ? 1 : 0;
@@ -38,7 +39,7 @@ function uniqueGuard<T>(fn: () => T): T {
   try {
     return fn();
   } catch (err: any) {
-    if (/UNIQUE/i.test(String(err?.message))) throw new HttpError(409, 'Er bestaat al een soort met die naam');
+    if (/UNIQUE/i.test(String(err?.message))) throw new HttpError(409, t('A species with that name already exists'));
     throw err;
   }
 }
@@ -48,7 +49,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const PHOTO_NAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|heic)$/;
 
 function checkText(v: unknown, field: string): void {
-  if (typeof v === 'string' && v.length > MAX_TEXT) throw new HttpError(400, `${field} is te lang (max ${MAX_TEXT} tekens)`);
+  if (typeof v === 'string' && v.length > MAX_TEXT) throw new HttpError(400, t('{field} is too long (max {max} characters)', { field, max: MAX_TEXT }));
 }
 
 /** Copies the allowed fields from a request body, validating text length and dates; '' becomes null. */
@@ -58,15 +59,15 @@ const pick = (src: Row, fields: readonly string[]): Row =>
       .filter((f) => f in src)
       .map((f) => {
         checkText(src[f], f);
-        if (DATE_FIELDS.has(f) && src[f] && !ISO_DATE.test(String(src[f]))) throw new HttpError(400, `${f} moet YYYY-MM-DD zijn`);
+        if (DATE_FIELDS.has(f) && src[f] && !ISO_DATE.test(String(src[f]))) throw new HttpError(400, t('{field} must be YYYY-MM-DD', { field: f }));
         return [f, src[f] === '' ? null : src[f]];
       }),
   );
 
 function checkLog(body: Row, today: string): void {
   checkText(body.note, 'note');
-  if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, 'date moet YYYY-MM-DD zijn');
-  if (body.date && String(body.date) > today) throw new HttpError(400, 'Datum mag niet in de toekomst liggen');
+  if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, t('{field} must be YYYY-MM-DD', { field: 'date' }));
+  if (body.date && String(body.date) > today) throw new HttpError(400, t('Date cannot be in the future'));
 }
 
 export const BACKUP_FORMAT = 'plantendagboek-backup';
@@ -133,13 +134,13 @@ export class PlantService {
 
   getPlant(id: number): Row {
     const r = this.db.prepare(`${this.plantSelect} WHERE p.id = ?`).get(id);
-    if (!r) throw new HttpError(404, 'Plant niet gevonden');
+    if (!r) throw new HttpError(404, t('Plant not found'));
     const species = r.species_id ? this.db.prepare('SELECT * FROM species WHERE id = ?').get(r.species_id) : null;
     return { ...this.decorate(r), species, logs: this.listLogs(id) };
   }
 
   createPlant(body: Row): Row {
-    if (!body.name) throw new HttpError(400, 'name is verplicht');
+    if (!body.name) throw new HttpError(400, t('{field} is required', { field: 'name' }));
     const data = pick(body, PLANT_FIELDS);
     validate(data);
     return this.getPlant(this.insert('plants', data));
@@ -160,12 +161,12 @@ export class PlantService {
 
   getSpecies(id: number): Row {
     const r = this.db.prepare('SELECT * FROM species WHERE id = ?').get(id);
-    if (!r) throw new HttpError(404, 'Soort niet gevonden');
+    if (!r) throw new HttpError(404, t('Species not found'));
     return r;
   }
 
   upsertSpecies(body: Row, id?: number): Row {
-    if (!id && !body.name) throw new HttpError(400, 'name is verplicht');
+    if (!id && !body.name) throw new HttpError(400, t('{field} is required', { field: 'name' }));
     const data = pick(body, SPECIES_FIELDS);
     validate(data);
     if (id) {
@@ -179,7 +180,7 @@ export class PlantService {
   /** Returns the stored species for a chosen name, or creates one with only the names filled in. */
   resolveSpecies(choice: Row): { species: Row; created: boolean } {
     const latin = String(choice.latin_name ?? '').trim();
-    if (!latin) throw new HttpError(400, 'latin_name is verplicht');
+    if (!latin) throw new HttpError(400, t('{field} is required', { field: 'latin_name' }));
     const gbif = Number.isInteger(choice.gbif_key) ? Number(choice.gbif_key) : null;
     const found = ((gbif && this.db.prepare('SELECT * FROM species WHERE gbif_key = ?').get(gbif)) ||
       this.db.prepare('SELECT * FROM species WHERE latin_name = ? COLLATE NOCASE').get(latin)) as Row | undefined;
@@ -230,8 +231,8 @@ export class PlantService {
     this.getPlant(plantId);
     checkLog(body, toISODate(this.now()));
     const type = body.type;
-    if (!LOG_TYPES.includes(type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
-    if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, 'outcome moet good of bad zijn');
+    if (!LOG_TYPES.includes(type)) throw new HttpError(400, t('{field} must be one of {list}', { field: 'type', list: LOG_TYPES.join(', ') }));
+    if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, t('outcome must be good or bad'));
     const date: string = body.date || toISODate(this.now());
     const logId = Number(
       this.db
@@ -248,14 +249,14 @@ export class PlantService {
   /** Copies a plant (e.g. a cutting) without its photo, dates and diary. */
   duplicatePlant(id: number): Row {
     const src = this.getPlant(id);
-    const copy: Row = { name: `${src.name} (stek)`, acquired: toISODate(this.now()) };
+    const copy: Row = { name: t('{name} (cutting)', { name: String(src.name) }), acquired: toISODate(this.now()) };
     for (const f of ['species_id', 'room', 'location_note', 'light_level', 'soil', 'toxic']) if (src[f] != null) copy[f] = src[f];
     return this.createPlant(copy);
   }
 
   /** Sets (or clears, with null) the plant's photo; returns the previous file name so the caller can delete it. */
   setPhoto(id: number, name: string | null): string | null {
-    if (name !== null && !PHOTO_NAME.test(name)) throw new HttpError(400, 'Ongeldige foto');
+    if (name !== null && !PHOTO_NAME.test(name)) throw new HttpError(400, t('Invalid photo'));
     const old = this.getPlant(id).photo as string | null;
     this.db.prepare('UPDATE plants SET photo = ? WHERE id = ?').run(name, id);
     return old;
@@ -280,7 +281,7 @@ export class PlantService {
   /** Replaces everything with a backup. Photos not in `photos` are dropped from the plants. All or nothing. */
   importData(data: Row, photos: ReadonlySet<string>): { plants: number } {
     if (data?.format !== BACKUP_FORMAT || data.version !== 1 || !['species', 'plants', 'logs'].every((k) => Array.isArray(data[k])))
-      throw new HttpError(400, 'Dit is geen geldige back-up van Plantendagboek');
+      throw new HttpError(400, t('This is not a valid Plant Diary backup'));
     const insert = (table: string, rows: Row[]) => {
       const allowed = columnsOf(this.db, table);
       for (const row of rows) {
@@ -299,7 +300,7 @@ export class PlantService {
       this.db.exec('COMMIT');
     } catch (e) {
       this.db.exec('ROLLBACK');
-      throw e instanceof HttpError ? e : new HttpError(400, 'Back-up kon niet worden ingelezen');
+      throw e instanceof HttpError ? e : new HttpError(400, t('The backup could not be read'));
     }
     return { plants: plants.length };
   }
@@ -321,9 +322,9 @@ export class PlantService {
 
   updateLog(plantId: number, logId: number, body: Row): Row {
     const old = this.db.prepare('SELECT * FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
-    if (!old) throw new HttpError(404, 'Bericht niet gevonden');
+    if (!old) throw new HttpError(404, t('Entry not found'));
     checkLog(body, toISODate(this.now()));
-    if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
+    if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, t('{field} must be one of {list}', { field: 'type', list: LOG_TYPES.join(', ') }));
     const type = body.type ?? old.type;
     const date = body.date || old.date;
     const note = 'note' in body ? body.note || null : old.note;

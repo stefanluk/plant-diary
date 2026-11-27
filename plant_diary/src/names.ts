@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 export interface NameHit {
   latin_name: string;
   name_nl?: string | null;
@@ -79,7 +80,7 @@ export class NameSearch {
     };
     if (g.status === 'fulfilled') g.value.forEach(add);
     if (w.status === 'fulfilled') w.value.forEach(add);
-    if (g.status === 'rejected' && w.status === 'rejected') throw new Error('Online namen zoeken is niet bereikbaar');
+    if (g.status === 'rejected' && w.status === 'rejected') throw new Error(t('Online name search is unavailable'));
     const hits = [...merged.values()].slice(0, 8);
     this.cache.set(key, { at: Date.now(), hits });
     return hits;

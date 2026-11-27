@@ -1,0 +1,10 @@
+configuration:
+  notify_service:
+    name: Notificatieservice
+    description: Notify-service voor de dagelijkse watersamenvatting, bijv. notify.mobile_app_telefoon. Leeg laten schakelt pushberichten uit.
+  notify_hour:
+    name: Meldingstijdstip
+    description: Uur van de dag (0-23) waarop de dagelijkse samenvatting wordt verstuurd.
+  language:
+    name: Taal
+    description: Taal van de gebruikersinterface en meldingen.

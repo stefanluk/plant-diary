@@ -27,3 +27,7 @@ Environment variables (the add-on's `run.sh` sets these from the add-on options)
 - Database changes must be additive migrations in `db.ts`.
 - The Docker image only copies `src`, `public` and `run.sh`, so static data must live in TypeScript modules.
 - Never commit secrets (`.env` and `.local/` are git-ignored).
+
+## Languages
+
+English text is the translation key. `GET /api/i18n` returns the active language and its dictionary from `plant_diary/public/locales/<lang>.json` (no file needed for English). To add a language: copy `nl.json`, translate the values, add the code to `language: list(...)` in `plant_diary/config.yaml` and add `translations/<lang>.yaml`.

@@ -50,7 +50,7 @@ test('service: watering logs, back-dating, due list, toxic fallback', () => {
   assert.equal(p.next_water, '2026-07-20');
   assert.ok(!svc.dueToday().some((d) => d.id === lepel.id));
 
-  assert.throws(() => svc.addLog(lepel.id, { type: 'bogus' }), /type moet/);
+  assert.throws(() => svc.addLog(lepel.id, { type: 'bogus' }), /type must/);
 });
 
 import { lightStatus } from '../src/options.js';
@@ -113,10 +113,10 @@ test('ingress-only mode rejects other clients; input is validated', async () => 
   assert.equal(ok.statusCode, 200);
   assert.equal(ok.headers['x-content-type-options'], 'nosniff');
   const p = svc.createPlant({ name: 'X' });
-  assert.throws(() => svc.setPhoto(Number(p.id), '../../etc/passwd'), /Ongeldige foto/);
+  assert.throws(() => svc.setPhoto(Number(p.id), '../../etc/passwd'), /Invalid photo/);
   assert.equal(svc.setPhoto(Number(p.id), '11111111-2222-3333-4444-555555555555.jpg'), null);
   assert.equal(svc.getPlant(Number(p.id)).photo, '11111111-2222-3333-4444-555555555555.jpg');
-  assert.throws(() => svc.addLog(Number(p.id), { type: 'note', note: 'x'.repeat(5000) }), /te lang/);
+  assert.throws(() => svc.addLog(Number(p.id), { type: 'note', note: 'x'.repeat(5000) }), /too long/);
   await app.close();
 });
 
@@ -167,7 +167,7 @@ test('duplicating a plant keeps species and place but not photo, dates or diary'
   svc.addLog(Number(src.id), { type: 'water' });
   svc.setPhoto(Number(src.id), '11111111-2222-3333-4444-555555555555.jpg');
   const copy = svc.duplicatePlant(Number(src.id));
-  assert.equal(copy.name, 'Pilea (stek)');
+  assert.equal(copy.name, 'Pilea (cutting)');
   assert.equal(copy.species_id, sp.id);
   assert.equal(copy.room, 'Keuken');
   assert.equal(copy.acquired, '2026-07-15');
@@ -198,8 +198,8 @@ test('backup export can be imported again; invalid backups change nothing', () =
   other.importData(backup, new Set());
   assert.equal(other.getPlant(Number(p.id)).photo, null);
 
-  assert.throws(() => other.importData({ format: 'nope' }, new Set()), /geen geldige back-up/);
-  assert.throws(() => other.importData({ ...backup, plants: [{ id: 1, name: 'A' }, { id: 1, name: 'B' }] }, new Set()), /kon niet/);
+  assert.throws(() => other.importData({ format: 'nope' }, new Set()), /not a valid/);
+  assert.throws(() => other.importData({ ...backup, plants: [{ id: 1, name: 'A' }, { id: 1, name: 'B' }] }, new Set()), /could not be read/);
   assert.equal(other.listPlants().length, 1);
 });
 
@@ -240,7 +240,7 @@ test('daily summary sends one push for all due plants, once a day', async () => 
     await ha.notifyDue('2026-07-15');
     await ha.notifyDue('2026-07-15');
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].title, '2 planten hebben water nodig');
+    assert.equal(calls[0].title, '2 plants need water');
     assert.equal(calls[0].message, 'A, B');
     await ha.notifyDue('2026-07-16');
     assert.equal(calls.length, 2);
@@ -252,6 +252,6 @@ test('daily summary sends one push for all due plants, once a day', async () => 
 test('diary entries cannot be dated in the future', () => {
   const svc = new PlantService(openDb(':memory:'), () => new Date(2026, 6, 15));
   const id = Number(svc.createPlant({ name: 'A' }).id);
-  assert.throws(() => svc.addLog(id, { type: 'note', date: '2026-07-16' }), /toekomst/);
+  assert.throws(() => svc.addLog(id, { type: 'note', date: '2026-07-16' }), /future/);
   assert.doesNotThrow(() => svc.addLog(id, { type: 'note', date: '2026-07-15' }));
 });

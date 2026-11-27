@@ -1,7 +1,8 @@
-name: Plantendagboek
-version: "0.10.1"
+name: Plant Diary
+version: "0.11.0"
 slug: plant_diary
 description: Houseplant diary and watering schedule with MQTT sensors and push reminders
+url: https://github.com/stefanluk/plant-diary
 arch: [amd64, aarch64]
 startup: application
 boot: auto
@@ -17,6 +18,8 @@ services:
 options:
   notify_service: ""
   notify_hour: 9
+  language: nl
 schema:
   notify_service: str?
   notify_hour: int(0,23)
+  language: list(en|nl)

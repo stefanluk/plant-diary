@@ -1,0 +1,10 @@
+configuration:
+  notify_service:
+    name: Notification service
+    description: Notify service for the daily watering summary, e.g. notify.mobile_app_phone. Leave empty to disable push messages.
+  notify_hour:
+    name: Notification hour
+    description: Hour of the day (0-23) at which the daily summary is sent.
+  language:
+    name: Language
+    description: Language of the user interface and notifications.

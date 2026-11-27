@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { extname, join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb, type Row } from './db.js';
+import { getLanguage, setLanguage, t } from './i18n.js';
 import { HttpError, PHOTO_NAME, PlantService } from './service.js';
 import { HaBridge } from './ha.js';
 import { NameSearch } from './names.js';
@@ -53,11 +54,11 @@ async function readHead(stream: NodeJS.ReadableStream, n: number): Promise<{ hea
 /** Stores an uploaded image after checking its extension and file signature; returns the stored file name. */
 async function savePhoto(file: NodeJS.ReadableStream, filename: string): Promise<string> {
   const ext = extname(filename).toLowerCase();
-  if (!PHOTO_EXT.has(ext)) throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
+  if (!PHOTO_EXT.has(ext)) throw new HttpError(400, t('Only images are allowed'));
   const { head, rest } = await readHead(file, 12);
   if (!isImage(head)) {
     file.resume();
-    throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
+    throw new HttpError(400, t('Only images are allowed'));
   }
   const name = `${randomUUID()}${ext}`;
   await pipeline(rest, createWriteStream(join(PHOTO_DIR, name)));
@@ -69,7 +70,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   app.addHook('onRequest', async (req, reply) => {
     if (!ingressOnly) return;
     const ip = req.ip.replace(/^::ffff:/, '');
-    if (ip !== INGRESS_IP && ip !== '127.0.0.1' && ip !== '::1') return reply.code(403).send({ error: 'Alleen via Home Assistant' });
+    if (ip !== INGRESS_IP && ip !== '127.0.0.1' && ip !== '::1') return reply.code(403).send({ error: t('Only available through Home Assistant') });
   });
   app.addHook('onSend', async (_req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
@@ -92,6 +93,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   const refresh = <T>(v: T) => (ha?.publish(), v);
   const id = (req: any) => Number(req.params.id);
 
+  app.get('/api/i18n', async () => getLanguage());
   app.get('/api/plants', async () => svc.listPlants());
   app.post('/api/plants', async (req, reply) => reply.code(201).send(refresh(svc.createPlant(req.body as any))));
   app.get('/api/plants/:id', async (req) => svc.getPlant(id(req)));
@@ -102,7 +104,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   app.post('/api/plants/:id/photo', async (req) => {
     svc.getPlant(id(req));
     const part = await req.file();
-    if (!part) throw new HttpError(400, 'Geen bestand');
+    if (!part) throw new HttpError(400, t('No file'));
     removePhotoFile(svc.setPhoto(id(req), await savePhoto(part.file, part.filename)));
     return svc.getPlant(id(req));
   });
@@ -186,6 +188,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
 }
 
 async function main() {
+  setLanguage(process.env.LANGUAGE);
   const db = openDb(join(DATA_DIR, 'plants.db'));
   const svc = new PlantService(db);
 

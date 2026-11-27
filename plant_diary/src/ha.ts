@@ -1,5 +1,6 @@
 import mqtt, { type MqttClient } from 'mqtt';
 import WebSocket from 'ws';
+import { t } from './i18n.js';
 import type { Row } from './db.js';
 import type { PlantService } from './service.js';
 
@@ -67,14 +68,14 @@ export class HaBridge {
   publish(): void {
     if (!this.mqtt?.connected) return;
     const plants = this.svc.listPlants();
-    const device = { identifiers: [PREFIX], name: 'Plantendagboek' };
+    const device = { identifiers: [PREFIX], name: 'Plant Diary' };
     const pub = (topic: string, payload: unknown, retain = true) =>
       this.mqtt!.publish(topic, typeof payload === 'string' ? payload : JSON.stringify(payload), { retain });
 
     for (const p of plants) {
       const base = `${PREFIX}/${p.id}`;
       pub(`homeassistant/sensor/${PREFIX}_${p.id}_next/config`, {
-        name: `${p.name} volgende water`,
+        name: t('{name} next watering', { name: p.name }),
         unique_id: `${PREFIX}_${p.id}_next`,
         state_topic: `${base}/state`,
         value_template: '{{ value_json.next_water }}',
@@ -83,7 +84,7 @@ export class HaBridge {
         device,
       });
       pub(`homeassistant/button/${PREFIX}_${p.id}_water/config`, {
-        name: `${p.name} water gegeven`,
+        name: t('{name} watered', { name: p.name }),
         unique_id: `${PREFIX}_${p.id}_water`,
         command_topic: `${base}/water/set`,
         device,
@@ -98,7 +99,7 @@ export class HaBridge {
     }
     const due = this.svc.dueToday();
     pub(`homeassistant/sensor/${PREFIX}_due/config`, {
-      name: 'Planten water nodig',
+      name: t('Plants needing water'),
       unique_id: `${PREFIX}_due`,
       state_topic: `${PREFIX}/due`,
       value_template: '{{ value_json.count }}',
@@ -112,19 +113,19 @@ export class HaBridge {
   /** Sends one summary push per day listing the plants that need water. */
   async notifyDue(today: string): Promise<void> {
     if (!this.cfg.notifyService || !this.cfg.supervisorToken || !this.cfg.haUrl) return;
-    if (!/^[a-z_]+\.[a-z0-9_]+$/.test(this.cfg.notifyService)) return this.log.error('Ongeldige notify_service');
+    if (!/^[a-z_]+\.[a-z0-9_]+$/.test(this.cfg.notifyService)) return this.log.error('Invalid notify_service');
     if (this.svc.getMeta('notified_on') === today) return;
     const due = this.svc.dueToday();
     if (!due.length) return;
     this.svc.setMeta('notified_on', today);
     const [domain, service] = this.cfg.notifyService.split('.');
     const names = due.map((p) => p.name);
-    const shown = names.length > 8 ? [...names.slice(0, 8), `en ${names.length - 8} meer`] : names;
+    const shown = names.length > 8 ? [...names.slice(0, 8), t('and {n} more', { n: names.length - 8 })] : names;
     await fetch(`${this.cfg.haUrl}/services/${domain}/${service}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.cfg.supervisorToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: due.length === 1 ? '1 plant heeft water nodig' : `${due.length} planten hebben water nodig`,
+        title: due.length === 1 ? t('1 plant needs water') : t('{n} plants need water', { n: due.length }),
         message: shown.join(', '),
         data: { tag: `${PREFIX}_due` },
       }),

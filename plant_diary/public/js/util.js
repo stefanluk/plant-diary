@@ -1,22 +1,27 @@
 export const $ = (s) => document.querySelector(s);
 
+const i18n = await fetch('api/i18n').then((r) => r.json()).catch(() => ({ lang: 'en', messages: {} }));
+export const lang = i18n.lang;
+/** Translates an English message and fills `{placeholders}`. */
+export const t = (msg, params = {}) => (i18n.messages[msg] ?? msg).replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m));
+
 /** Shows a message; with `action` ({label, fn}) it also shows a button and stays a bit longer. */
 export function toast(msg, ok = false, action = null) {
   document.querySelectorAll('.toast').forEach((t) => t.remove());
-  const t = document.createElement('div');
-  t.className = 'toast' + (ok ? ' ok' : '');
-  t.setAttribute('role', ok ? 'status' : 'alert');
+  const el = document.createElement('div');
+  el.className = 'toast' + (ok ? ' ok' : '');
+  el.setAttribute('role', ok ? 'status' : 'alert');
   const span = document.createElement('span');
   span.textContent = msg;
-  t.append(span);
+  el.append(span);
   if (action) {
     const b = document.createElement('button');
     b.textContent = action.label;
-    b.onclick = async () => { t.remove(); try { await action.fn(); } catch (x) { toast(x.message); } };
-    t.append(b);
+    b.onclick = async () => { el.remove(); try { await action.fn(); } catch (x) { toast(x.message); } };
+    el.append(b);
   }
-  document.body.append(t);
-  setTimeout(() => t.remove(), action ? 8000 : 4000);
+  document.body.append(el);
+  setTimeout(() => el.remove(), action ? 8000 : 4000);
 }
 
 // Two-step delete without a browser dialog: first click arms, second click confirms.
@@ -24,14 +29,14 @@ export function armDelete(btn, label, action) {
   let armed = false, timer;
   btn.onclick = async (e) => {
     e.stopPropagation();
-    if (!armed) { armed = true; btn.textContent = 'Zeker weten?'; btn.classList.add('armed'); timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove('armed'); }, 3000); return; }
+    if (!armed) { armed = true; btn.textContent = t('Are you sure?'); btn.classList.add('armed'); timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove('armed'); }, 3000); return; }
     clearTimeout(timer); await action();
   };
 }
 
-export const TYPES = { water:'💧 Water', feed:'🌿 Voeding', repot:'🪴 Verpot', prune:'✂️ Gesnoeid', note:'📝 Notitie' };
-export const LIGHT = { shade:'Volledige schaduw', half_shade:'Halfschaduw', indirect:'Indirect licht', full_sun:'Vol zonlicht' };
-export const SOIL = { standard:'Standaard potgrond', cactus:'Cactus- en succulentengrond', aroid:'Aroid mix', orchid:'Orchideeëngrond' };
+export const TYPES = { water:`💧 ${t('Water')}`, feed:`🌿 ${t('Feeding')}`, repot:`🪴 ${t('Repotted')}`, prune:`✂️ ${t('Pruned')}`, note:`📝 ${t('Note')}` };
+export const LIGHT = { shade:t('Full shade'), half_shade:t('Partial shade'), indirect:t('Indirect light'), full_sun:t('Full sun') };
+export const SOIL = { standard:t('Standard potting soil'), cactus:t('Cactus and succulent soil'), aroid:t('Aroid mix'), orchid:t('Orchid soil') };
 
 export const api = async (path, opts = {}) => {
   const isForm = opts.body instanceof FormData;
@@ -43,14 +48,14 @@ export const api = async (path, opts = {}) => {
       body: isForm || !opts.body ? opts.body : JSON.stringify(opts.body),
     });
   } catch {
-    throw new Error('Geen verbinding met de server');
+    throw new Error(t('Cannot reach the server'));
   }
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.status === 204 ? null : res.json();
 };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
-export const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', { day:'numeric', month:'short' }) : '–';
+export const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString(lang, { day:'numeric', month:'short' }) : '–';
 export const isoDate = (offsetDays = 0) => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4 + offsetDays * 864e5).toISOString().slice(0, 10);
 export const today = () => isoDate();
 
@@ -83,6 +88,6 @@ export async function resizeImage(file, max = 1600) {
 
 /** Replaces the page content with an error and a retry button. */
 export function showError(err, retry) {
-  $('#app').innerHTML = `<div class="empty"><p>${esc(err.message)}</p><button id="retry">Opnieuw proberen</button></div>`;
+  $('#app').innerHTML = `<div class="empty"><p>${esc(err.message)}</p><button id="retry">${t('Try again')}</button></div>`;
   $('#retry').onclick = retry;
 }

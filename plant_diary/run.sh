@@ -4,6 +4,7 @@ export DATA_DIR=/config
 export PORT=8099
 export NOTIFY_SERVICE="$(bashio::config 'notify_service')"
 export NOTIFY_HOUR="$(bashio::config 'notify_hour')"
+export LANGUAGE="$(bashio::config 'language')"
 export INGRESS_ONLY=true
 if bashio::services.available mqtt; then
   export MQTT_URL="mqtt://$(bashio::services mqtt host):$(bashio::services mqtt port)"
