@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.1
+- Add-on icon and logo.
+
 ## 0.11.0
 - All texts are English by default; added `language` option (`en`, `nl`; default `nl`).
 - Add-on info page: README, documentation, changelog and working link.
