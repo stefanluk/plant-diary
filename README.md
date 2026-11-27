@@ -1,15 +1,15 @@
 # Plant Diary (Plantendagboek)
 
-A Home Assistant add-on to keep track of your houseplants: a watering schedule per species (summer/winter adjusts automatically), a diary with water/feed/repot/prune/notes/photos, light and toxicity info, push reminders and MQTT sensors in Home Assistant.
+A Home Assistant add-on to keep track of your houseplants: a watering schedule per species (summer/winter adjusts automatically), a diary with water/feed/repot/prune/notes, a photo per plant, light and toxicity info, push reminders and MQTT sensors in Home Assistant.
 
-> 🇳🇱 **Samenvatting:** een Home Assistant add-on om kamerplanten bij te houden (waterschema, dagboek met foto's, standplaats, giftigheid, push-herinneringen en sensoren). Installatie: zie hieronder. De interface is in het Nederlands.
+> 🇳🇱 **Samenvatting:** een Home Assistant add-on om kamerplanten bij te houden (waterschema, dagboek, foto per plant, standplaats, giftigheid, push-herinneringen en sensoren). Installatie: zie hieronder. De interface is in het Nederlands.
 
 ## Features
 
 - Plant list with the next watering date; the "water given" button only shows when watering is due.
 - Species autocomplete while adding a plant: scientific names from [GBIF](https://www.gbif.org/) and Dutch/English names from [Wikidata](https://www.wikidata.org/) (no key needed). There is no built-in catalog.
 - Fixed light levels (full shade, half shade, indirect light, full sun) and soil types; a warning when a plant stands outside its species' light range.
-- Diary entries with date, note and optional photo; entries can be edited or deleted.
+- Diary entries with date and note; entries can be edited or deleted.
 - Care data (watering days, light range, soil, toxicity, tips) is entered once per species via "Bewerk soort" and then reused by every plant of that species. No paid or keyed API is needed.
 - Push reminders with a **Water given** action, and sensors/buttons through MQTT discovery.
 - Runs only behind Home Assistant ingress (sidebar panel); no extra port is exposed.

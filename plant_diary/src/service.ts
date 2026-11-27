@@ -66,7 +66,6 @@ const pick = (src: Row, fields: readonly string[]): Row =>
 function checkLog(body: Row): void {
   checkText(body.note, 'note');
   if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, 'date moet YYYY-MM-DD zijn');
-  if (body.photo != null && !PHOTO_NAME.test(String(body.photo))) throw new HttpError(400, 'Ongeldige foto');
 }
 
 export class HttpError extends Error {
@@ -232,13 +231,21 @@ export class PlantService {
     if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, 'outcome moet good of bad zijn');
     const date: string = body.date || toISODate(this.now());
     this.db
-      .prepare('INSERT INTO logs (plant_id, type, date, note, outcome, photo) VALUES (?,?,?,?,?,?)')
-      .run(plantId, type, date, body.note ?? null, body.outcome ?? null, body.photo ?? null);
+      .prepare('INSERT INTO logs (plant_id, type, date, note, outcome) VALUES (?,?,?,?,?)')
+      .run(plantId, type, date, body.note ?? null, body.outcome ?? null);
     const column = LAST_COLUMN[type];
     // Back-dated entries must not move the "last" date backwards.
     if (column)
       this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ? AND (${column} IS NULL OR ${column} < ?)`).run(date, plantId, date);
     return this.getPlant(plantId);
+  }
+
+  /** Sets (or clears, with null) the plant's photo; returns the previous file name so the caller can delete it. */
+  setPhoto(id: number, name: string | null): string | null {
+    if (name !== null && !PHOTO_NAME.test(name)) throw new HttpError(400, 'Ongeldige foto');
+    const old = this.getPlant(id).photo as string | null;
+    this.db.prepare('UPDATE plants SET photo = ? WHERE id = ?').run(name, id);
+    return old;
   }
 
   deletePlant(id: number): void {
@@ -261,7 +268,7 @@ export class PlantService {
   updateLog(plantId: number, logId: number, body: Row): Row {
     const old = this.db.prepare('SELECT * FROM logs WHERE id = ? AND plant_id = ?').get(logId, plantId);
     if (!old) throw new HttpError(404, 'Bericht niet gevonden');
-    checkLog({ ...body, photo: undefined });
+    checkLog(body);
     if (body.type && !LOG_TYPES.includes(body.type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     const type = body.type ?? old.type;
     const date = body.date || old.date;

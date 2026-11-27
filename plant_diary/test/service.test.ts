@@ -107,7 +107,9 @@ test('ingress-only mode rejects other clients; input is validated', async () => 
   assert.equal(ok.statusCode, 200);
   assert.equal(ok.headers['x-content-type-options'], 'nosniff');
   const p = svc.createPlant({ name: 'X' });
-  assert.throws(() => svc.addLog(Number(p.id), { type: 'note', photo: '../../etc/passwd' }), /Ongeldige foto/);
+  assert.throws(() => svc.setPhoto(Number(p.id), '../../etc/passwd'), /Ongeldige foto/);
+  assert.equal(svc.setPhoto(Number(p.id), '11111111-2222-3333-4444-555555555555.jpg'), null);
+  assert.equal(svc.getPlant(Number(p.id)).photo, '11111111-2222-3333-4444-555555555555.jpg');
   assert.throws(() => svc.addLog(Number(p.id), { type: 'note', note: 'x'.repeat(5000) }), /te lang/);
   await app.close();
 });

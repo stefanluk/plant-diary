@@ -20,7 +20,7 @@ Environment variables (the add-on's `run.sh` sets these from the add-on options)
 
 ## API
 
-`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST /api/plants/:id/logs` (JSON or multipart with `photo`), `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST /api/species`, `PATCH /api/species/:id`, `GET /api/names/suggest?q=` (local + GBIF/Wikidata), `POST /api/species/resolve` (returns the stored species or creates a name-only one), `GET /api/due`.
+`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST/DELETE /api/plants/:id/photo` (multipart `photo`, one per plant), `POST /api/plants/:id/logs`, `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST /api/species`, `PATCH /api/species/:id`, `GET /api/names/suggest?q=` (local + GBIF/Wikidata), `POST /api/species/resolve` (returns the stored species or creates a name-only one), `GET /api/due`.
 
 ## Guidelines
 

@@ -97,24 +97,27 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   app.get('/api/plants/:id', async (req) => svc.getPlant(id(req)));
   app.patch('/api/plants/:id', async (req) => refresh(svc.updatePlant(id(req), req.body as any)));
 
+  const removePhotoFile = (name: string | null) => name && rmSync(join(PHOTO_DIR, name), { force: true });
+  app.post('/api/plants/:id/photo', async (req) => {
+    svc.getPlant(id(req));
+    const part = await req.file();
+    if (!part) throw new HttpError(400, 'Geen bestand');
+    removePhotoFile(svc.setPhoto(id(req), await savePhoto(part.file, part.filename)));
+    return svc.getPlant(id(req));
+  });
+  app.delete('/api/plants/:id/photo', async (req, reply) => {
+    removePhotoFile(svc.setPhoto(id(req), null));
+    return reply.code(204).send();
+  });
+
   app.delete('/api/plants/:id', async (req, reply) => {
+    removePhotoFile(svc.getPlant(id(req)).photo as string | null);
     svc.deletePlant(id(req));
     ha?.removePlant(id(req));
     return reply.code(204).send();
   });
 
-  app.post('/api/plants/:id/logs', async (req, reply) => {
-    let body: Record<string, any>;
-    if (req.isMultipart()) {
-      body = {};
-      for await (const part of req.parts()) {
-        if (part.type === 'file') body.photo = await savePhoto(part.file, part.filename);
-        else body[part.fieldname] = part.value;
-      }
-      if (body.photo && !body.type) body.type = 'photo';
-    } else body = req.body as any;
-    return reply.code(201).send(refresh(svc.addLog(id(req), body)));
-  });
+  app.post('/api/plants/:id/logs', async (req, reply) => reply.code(201).send(refresh(svc.addLog(id(req), req.body as any))));
   app.patch('/api/plants/:id/logs/:logId', async (req) =>
     refresh(svc.updateLog(id(req), Number((req.params as any).logId), req.body as any)));
   app.delete('/api/plants/:id/logs/:logId', async (req, reply) => {

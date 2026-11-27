@@ -21,8 +21,7 @@ CREATE TABLE IF NOT EXISTS logs (
   type TEXT NOT NULL,
   date TEXT NOT NULL,
   note TEXT,
-  outcome TEXT,
-  photo TEXT
+  outcome TEXT
 );
 CREATE INDEX IF NOT EXISTS logs_plant ON logs(plant_id, date);
 `;
@@ -60,6 +59,7 @@ const PLANT_COLUMNS: Record<string, string> = {
   next_water_override: 'TEXT',
   last_fed: 'TEXT',
   last_repotted: 'TEXT',
+  photo: 'TEXT',
   archived: 'INTEGER NOT NULL DEFAULT 0',
 };
 
@@ -100,5 +100,5 @@ export function openDb(path: string): DatabaseSync {
   return db;
 }
 
-export const LOG_TYPES = ['water', 'feed', 'repot', 'prune', 'note', 'photo'] as const;
+export const LOG_TYPES = ['water', 'feed', 'repot', 'prune', 'note'] as const;
 export const OUTCOMES = ['good', 'bad'] as const;
