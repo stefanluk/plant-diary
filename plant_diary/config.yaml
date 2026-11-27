@@ -1,5 +1,5 @@
 name: Plant Diary
-version: "0.11.2"
+version: "0.11.3"
 slug: plant_diary
 description: Houseplant diary and watering schedule with MQTT sensors and push reminders
 url: https://github.com/stefanluk/plant-diary

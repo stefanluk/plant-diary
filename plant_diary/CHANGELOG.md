@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.3
+- Plant card: feeding/repotting dates as chips, tidier footer.
+
 ## 0.11.2
 - UI files are always revalidated, so updates show up without a manual cache clear.
 

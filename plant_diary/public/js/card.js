@@ -36,8 +36,8 @@ export function bindWater(after) {
 export function plantCard(p, detail = false, action = '') {
   const where = [p.room, p.location_note].filter(Boolean).map(esc).join(' - ');
   const place = [where, p.light_level ? `(${LIGHT[p.light_level]})` : ''].filter(Boolean).join(' ');
-  const dates = detail ? [[t('Feeding'), p.last_fed], [t('Repotted'), p.last_repotted]].filter(([, d]) => d).map(([l, d]) => `${l} ${fmt(d)}`).join('<br>') : '';
-  const chips = [p.pot ? `<span class="badge">${t('Pot')} ${isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm'}</span>` : '', lightBadge(p)].filter(Boolean).join('');
+  const dates = detail ? [[t('Feeding'), p.last_fed], [t('Repotted'), p.last_repotted]].filter(([, d]) => d).map(([l, d]) => `<span class="badge">${l} ${fmt(d)}</span>`).join('') : '';
+  const chips = [dates, p.pot ? `<span class="badge">${t('Pot')} ${isNaN(p.pot) ? esc(p.pot) : p.pot + ' cm'}</span>` : '', lightBadge(p)].filter(Boolean).join('');
   const media = p.photo ? `<img ${detail ? 'id="thumb" ' : ''}src="photos/${esc(p.photo)}" alt="${esc(p.name)}" loading="lazy" decoding="async">` : '<span aria-hidden="true">🪴</span>';
   return `<div class="card pcard"${detail ? '' : ` data-id="${p.id}"`}>
     <div class="media${detail ? ' big' : ''}">${media}</div>
@@ -48,7 +48,7 @@ export function plantCard(p, detail = false, action = '') {
         ${place ? `<div class="muted clip">${place}</div>` : ''}
         ${chips ? `<div class="chips">${chips}</div>` : ''}
       </div>
-      <div class="pfoot"><span class="muted">${dates}</span><div class="side">${statusBadge(p)}${action}</div></div>
+      <div class="pfoot"><div class="side">${statusBadge(p)}${action}</div></div>
     </div>
   </div>`;
 }
