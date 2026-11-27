@@ -111,3 +111,14 @@ test('ingress-only mode rejects other clients; input is validated', async () => 
   assert.throws(() => svc.addLog(Number(p.id), { type: 'note', note: 'x'.repeat(5000) }), /te lang/);
   await app.close();
 });
+
+test('resetAll empties the database and restarts ids', () => {
+  const svc = new PlantService(openDb(':memory:'));
+  const p = svc.createPlant({ name: 'X' });
+  svc.addLog(Number(p.id), { type: 'water' });
+  svc.resolveSpecies({ latin_name: 'Monstera deliciosa' });
+  svc.resetAll();
+  assert.equal(svc.listPlants().length, 0);
+  assert.equal(svc.listSpecies().length, 0);
+  assert.equal(svc.createPlant({ name: 'Y' }).id, 1);
+});

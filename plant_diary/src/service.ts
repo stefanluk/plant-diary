@@ -241,6 +241,11 @@ export class PlantService {
     this.db.prepare('DELETE FROM plants WHERE id = ?').run(id);
   }
 
+  /** Deletes all plants, logs and species and restarts the id counters. */
+  resetAll(): void {
+    this.db.exec("DELETE FROM logs; DELETE FROM plants; DELETE FROM species; DELETE FROM sqlite_sequence WHERE name IN ('logs','plants','species')");
+  }
+
   private syncLast(plantId: number, type: string): void {
     const column = LAST_COLUMN[type];
     if (!column) return;

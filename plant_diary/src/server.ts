@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { createWriteStream, mkdirSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join, dirname, resolve } from 'node:path';
@@ -142,6 +142,13 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   });
   app.post('/api/species', async (req, reply) => reply.code(201).send(svc.upsertSpecies(req.body as any)));
   app.patch('/api/species/:id', async (req) => refresh(svc.upsertSpecies(req.body as any, id(req))));
+  app.post('/api/reset', async (_req, reply) => {
+    const ids = svc.listPlants().map((p) => p.id);
+    svc.resetAll();
+    for (const f of readdirSync(PHOTO_DIR)) rmSync(join(PHOTO_DIR, f), { force: true });
+    for (const pid of ids) ha?.removePlant(pid);
+    return reply.code(204).send();
+  });
   app.get('/api/due', async () => svc.dueToday());
   return app;
 }
