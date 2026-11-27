@@ -29,7 +29,7 @@ function validate(data: Row): void {
     if (!(cm > 0 && cm <= 200)) throw new HttpError(400, t('Pot must be a diameter in cm (1-200)'));
     data.pot = String(cm);
   }
-  for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (data[f] != null) data[f] = data[f] ? 1 : 0;
+  for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (data[f] != null) data[f] = ['0', 'false', ''].includes(String(data[f])) ? 0 : data[f] ? 1 : 0;
 }
 
 const normalize = (t: string) =>

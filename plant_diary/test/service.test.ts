@@ -36,6 +36,8 @@ test('service: watering logs, back-dating, due list, toxic fallback', () => {
   assert.equal(lepel.toxic, 1);
   assert.equal(lepel.toxic_pets, 1);
   assert.equal(lepel.toxic_humans, 0);
+  svc.upsertSpecies({ toxic_pets: '0', toxic_humans: '0' }, Number(sp.id));
+  assert.equal(svc.getPlant(Number(lepel.id)).toxic, 0);
   assert.equal(lepel.next_water, null);
 
   let p = svc.addLog(lepel.id, { type: 'water', date: '2026-07-05' });
