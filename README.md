@@ -10,7 +10,7 @@ A Home Assistant add-on to keep track of your houseplants: a watering schedule p
 - Species autocomplete while adding a plant: scientific names from [GBIF](https://www.gbif.org/) and Dutch/English names from [Wikidata](https://www.wikidata.org/) (no key needed). There is no built-in catalog.
 - Fixed light levels (full shade, half shade, indirect light, full sun) and soil types; a warning when a plant stands outside its species' light range.
 - Diary entries with date, note and optional photo; entries can be edited or deleted.
-- Care data (watering, light, soil, toxicity, pruning, extra info) is fetched **once** per species from [Perenual](https://perenual.com/docs/api) and stored locally; later plants of the same species reuse (and keep your edits to) the local data. Without a key you simply fill in the species data yourself.
+- Care data (watering days, light range, soil, toxicity, tips) is entered once per species via "Bewerk soort" and then reused by every plant of that species. No paid or keyed API is needed.
 - Push reminders with a **Water given** action, and sensors/buttons through MQTT discovery.
 - Runs only behind Home Assistant ingress (sidebar panel); no extra port is exposed.
 
@@ -34,7 +34,6 @@ Set `notify_service` to your phone's notify service, e.g. `notify.mobile_app_<yo
 |---|---|
 | `notify_service` | Notify service for push reminders. Empty = off. |
 | `notify_hour` | Hour (0–23) from which reminders are sent. |
-| `perenual_api_key` | Optional [Perenual](https://perenual.com/user/developer) API key for care data. Enter it on the add-on's **Configuration** tab, then restart the add-on. The free tier allows 100 requests/day (the add-on stops at 95) and only covers part of the species list; popular plants such as Monstera, Sansevieria and Zamioculcas need a paid plan, in which case you enter the data yourself. |
 
 ## Schedule logic
 
@@ -42,11 +41,11 @@ Next watering = last watered + interval. The interval is the plant's own overrid
 
 ## Data and privacy
 
-Data (SQLite database and photos) is stored in the add-on's config folder and included in Home Assistant backups. External services: GBIF and Wikidata (only the text you type in the species search is sent) and Perenual (only the scientific name, once per new species, and only when you configure a key). The API key is never stored in the database.
+Data (SQLite database and photos) is stored in the add-on's config folder and included in Home Assistant backups. External services: GBIF and Wikidata, only for the species autocomplete (the text you type is sent). Nothing else leaves your Home Assistant.
 
 ## Disclaimer
 
-Species data comes from third parties (Perenual, GBIF, Wikidata) and may be incomplete or wrong. Care tips and especially **toxicity information are indicative only** and not veterinary or medical advice. Check a reliable source (e.g. your vet or a poison control centre) for plants that pets or children can reach. You can correct any species through "Bewerk soort".
+Species names come from GBIF and Wikidata; care data is whatever you enter. Care tips and especially **toxicity information are indicative only** and not veterinary or medical advice. Check a reliable source (e.g. your vet or a poison control centre) for plants that pets or children can reach. You can correct any species through "Bewerk soort".
 
 ## Security
 

@@ -172,6 +172,25 @@ export class PlantService {
     return this.getSpecies(Number(res.lastInsertRowid));
   }
 
+  /** Returns the stored species for a chosen name, or creates one with only the names filled in. */
+  resolveSpecies(choice: Row): { species: Row; created: boolean } {
+    const latin = String(choice.latin_name ?? '').trim();
+    if (!latin) throw new HttpError(400, 'latin_name is verplicht');
+    const gbif = Number.isInteger(choice.gbif_key) ? Number(choice.gbif_key) : null;
+    const found = ((gbif && this.db.prepare('SELECT * FROM species WHERE gbif_key = ?').get(gbif)) ||
+      this.db.prepare('SELECT * FROM species WHERE latin_name = ? COLLATE NOCASE').get(latin)) as Row | undefined;
+    if (found) return { species: found, created: false };
+    const nl = choice.name_nl || null;
+    const en = choice.name_en || null;
+    const base = { latin_name: latin, name_nl: nl, name_en: en, gbif_key: gbif, source: 'gbif' };
+    try {
+      return { species: this.upsertSpecies({ ...base, name: nl || en || latin }), created: true };
+    } catch (e) {
+      if (!(e instanceof HttpError && e.status === 409)) throw e;
+      return { species: this.upsertSpecies({ ...base, name: `${nl || en || latin} (${latin})` }), created: true };
+    }
+  }
+
   /** Local ranked search; every query token must match somewhere in the species names. */
   searchSpecies(q: string, limit = 6): Row[] {
     const tokens = normalize(q).split(' ').filter(Boolean);

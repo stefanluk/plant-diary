@@ -10,7 +10,6 @@ import { openDb } from './db.js';
 import { HttpError, PlantService } from './service.js';
 import { HaBridge } from './ha.js';
 import { NameSearch } from './names.js';
-import { Perenual } from './perenual.js';
 import { LIGHT_LEVELS, SOILS } from './options.js';
 import { toISODate } from './schedule.js';
 
@@ -52,7 +51,7 @@ async function readHead(stream: NodeJS.ReadableStream, n: number): Promise<{ hea
   return { head: head.subarray(0, n), rest: rest() };
 }
 
-export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual, ingressOnly = false, names = new NameSearch()) {
+export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, names = new NameSearch()) {
   const app = Fastify({ logger: true, bodyLimit: 1024 * 1024 });
   app.addHook('onRequest', async (req, reply) => {
     if (!ingressOnly) return;
@@ -120,7 +119,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual, in
     return reply.code(204).send();
   });
 
-  app.get('/api/config', async () => ({ perenual: !!online?.enabled, light_levels: LIGHT_LEVELS, soils: SOILS }));
+  app.get('/api/config', async () => ({ light_levels: LIGHT_LEVELS, soils: SOILS }));
   app.get('/api/species', async () => svc.listSpecies());
   app.get('/api/species/search', async (req) => svc.searchSpecies(String((req.query as any).q ?? '')));
   app.get('/api/names/suggest', async (req) => {
@@ -137,13 +136,8 @@ export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual, in
     return { local, online: hits, offline };
   });
   app.post('/api/species/resolve', async (req, reply) => {
-    if (!online) throw new HttpError(503, 'Niet beschikbaar');
-    const out = await online.resolve((req.body ?? {}) as any);
+    const out = svc.resolveSpecies((req.body ?? {}) as any);
     return reply.code(out.created ? 201 : 200).send(out);
-  });
-  app.post('/api/species/:id/enrich', async (req) => {
-    if (!online) throw new HttpError(503, 'Niet beschikbaar');
-    return refresh(await online.enrich(id(req)));
   });
   app.get('/api/species/:id', async (req) => svc.getSpecies(id(req)));
   app.post('/api/species', async (req, reply) => reply.code(201).send(svc.upsertSpecies(req.body as any)));
@@ -155,7 +149,6 @@ export function buildApp(svc: PlantService, ha?: HaBridge, online?: Perenual, in
 async function main() {
   const db = openDb(join(DATA_DIR, 'plants.db'));
   const svc = new PlantService(db);
-  const online = new Perenual(db, svc, process.env.PERENUAL_API_KEY || undefined);
 
   const sup = process.env.SUPERVISOR_TOKEN;
   const ha = new HaBridge(
@@ -179,7 +172,7 @@ async function main() {
     if (now.getHours() >= hour) void ha.notifyDue(toISODate(now));
   }, 15 * 60_000);
 
-  await buildApp(svc, ha, online, process.env.INGRESS_ONLY === 'true').listen({ port: PORT, host: '0.0.0.0' });
+  await buildApp(svc, ha, process.env.INGRESS_ONLY === 'true').listen({ port: PORT, host: '0.0.0.0' });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) void main();

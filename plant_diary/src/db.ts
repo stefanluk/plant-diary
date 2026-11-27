@@ -100,8 +100,8 @@ function migrate(db: DatabaseSync): void {
   if (added.includes('toxic')) db.exec('UPDATE species SET toxic = MAX(toxic_cat, toxic_child)');
   // The single flag used to mean "toxic to people and pets"; carry it over to both new flags once.
   if (added.includes('toxic_pets')) db.exec('UPDATE species SET toxic_pets = toxic, toxic_humans = toxic WHERE toxic IS NOT NULL');
-  // Earlier cache entries must never contain an API key.
-  db.exec("DELETE FROM online_cache WHERE json LIKE '%key=%'");
+  // The online cache of earlier versions may contain an API key; it is no longer used.
+  db.exec('DROP TABLE IF EXISTS online_cache');
   if (addColumns(db, 'plants', PLANT_COLUMNS).includes('toxic'))
     db.exec(`UPDATE plants SET toxic = MAX(COALESCE(toxic_cat, 0), COALESCE(toxic_child, 0))
              WHERE toxic_cat IS NOT NULL OR toxic_child IS NOT NULL`);

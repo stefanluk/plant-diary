@@ -75,7 +75,6 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':
 const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', { day:'numeric', month:'short' }) : '–';
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 
-let cfg = { perenual: false };
 const LIGHT = { shade:'Volledige schaduw', half_shade:'Halfschaduw', indirect:'Indirect licht', full_sun:'Vol zonlicht' };
 const SOIL = { cactus:'Cactus/succulent', airy:'Doorlatend', standard:'Standaard', moist:'Vochtig/humusrijk', orchid_bark:'Orchideeënbast' };
 const opt = (map, sel, blank) => (blank ? `<option value="">${blank}</option>` : '') +
@@ -120,15 +119,6 @@ async function showList() {
   document.querySelectorAll('.card').forEach((c) => c.onclick = () => showPlant(c.dataset.id));
 }
 
-const EXTRA = { family:'Familie', type:'Type', cycle:'Levenscyclus', origin:'Herkomst', care_level:'Onderhoudsniveau', growth_rate:'Groeisnelheid',
-  maintenance:'Onderhoud', watering:'Water (Perenual)', sunlight:'Licht (Perenual)', soil:'Grond (Perenual)', indoor:'Binnenshuis', tropical:'Tropisch',
-  drought_tolerant:'Droogtetolerant', propagation:'Vermeerderen', pests:'Gevoelig voor' };
-function extraInfo(s) {
-  let x = {}; try { x = JSON.parse(s.extra || '{}'); } catch {}
-  const rows = Object.entries(EXTRA).filter(([k]) => x[k] != null && x[k] !== '')
-    .map(([k, l]) => `<div><span class="muted">${l}</span><br>${esc(x[k] === true ? 'ja' : x[k] === false ? 'nee' : x[k])}</div>`);
-  return rows.length ? `<details style="margin-top:12px"><summary class="muted">Meer over deze soort</summary><div class="grid" style="margin-top:8px">${rows.join('')}</div></details>` : '';
-}
 function toxicBox(p) {
   const who = [p.toxic_pets ? 'huisdieren (o.a. katten)' : '', p.toxic_humans ? 'mensen (o.a. kleine kinderen)' : ''].filter(Boolean);
   return who.length ? `<div class="warnbox">⚠️ Giftig voor ${who.join(' en ')}. Buiten bereik houden.</div>` : '';
@@ -152,8 +142,7 @@ function infoBlock(p) {
       ${tip('🪴 Verpotten', s.repot_tip)}
       ${tip('✂️ Snoeien', s.prune_tip)}
     </div>
-    ${extraInfo(s)}
-    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Bewerk soort</button>${cfg.perenual ? '<button class="sec" id="enrich">Vul lege velden aan (Perenual)</button>' : ''}</div></div>`;
+    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Bewerk soort</button></div></div>`;
 }
 
 async function showPlant(id) {
@@ -200,10 +189,6 @@ async function showPlant(id) {
     await api('plants/' + id, { method:'PATCH', body:{ light_level: e.target.value || null } }).catch((x) => toast(x.message)); showPlant(id);
   };
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);
-  if ($('#enrich')) $('#enrich').onclick = async () => {
-    const r = await api(`species/${p.species_id}/enrich`, { method:'POST' }).catch((x) => (toast(x.message), null));
-    if (r) { toast(r.note || 'Lege velden aangevuld'); showPlant(p.id); }
-  };
   $('#openlog').onclick = () => {
     const d = modal('Update schrijven', logForm());
     d.querySelector('#log').onsubmit = async (e) => {
@@ -290,8 +275,8 @@ $('#add').onclick = () => {
   };
   const choose = async (it) => {
     if (it.id) return pick(it);
-    $('#chosen').textContent = 'Soortgegevens ophalen…';
-    try { const r = await api('species/resolve', { method:'POST', body: it }); pick(r.species, r.note); }
+    $('#chosen').textContent = 'Soort opslaan…';
+    try { const r = await api('species/resolve', { method:'POST', body: it }); pick(r.species, r.created ? 'Nieuwe soort: vul de verzorgingsgegevens in via "Bewerk soort" op de plantpagina.' : ''); }
     catch (x) { $('#chosen').textContent = ''; toast(x.message); }
   };
   const label = (s) => `<strong>${esc(s.latin_name || s.name)}</strong> <span class="muted">${esc([s.name_nl, s.name_en].filter(Boolean).join(' · '))}${s.id ? ' · opgeslagen' : ''}</span>`;
@@ -322,7 +307,7 @@ $('#add').onclick = () => {
     if (p) showPlant(p.id);
   };
 };
-api('config').then((c) => { cfg = c; }).catch(() => {}).finally(showList);
+showList();
 </script>
 </body>
 </html>
