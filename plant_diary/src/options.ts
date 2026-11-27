@@ -1,4 +1,4 @@
-// Fixed option lists shared by the API and the UI.
+// Fixed option lists shared by the UI.
 export const LIGHT_LEVELS = ['shade', 'half_shade', 'indirect', 'full_sun'] as const;
 export type LightLevel = (typeof LIGHT_LEVELS)[number];
 

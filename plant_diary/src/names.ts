@@ -84,14 +84,4 @@ export class NameSearch {
     this.cache.set(key, { at: Date.now(), hits });
     return hits;
   }
-
-  /** Dutch and English names for one scientific name; empty when Wikidata has none. */
-  async labels(latin: string): Promise<{ name_nl: string | null; name_en: string | null }> {
-    try {
-      const hit = (await this.wikidata(latin, ['en'])).find((h) => h.latin_name.toLowerCase() === latin.toLowerCase());
-      return { name_nl: hit?.name_nl ?? null, name_en: hit?.name_en ?? null };
-    } catch {
-      return { name_nl: null, name_en: null };
-    }
-  }
 }

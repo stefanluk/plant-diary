@@ -5,15 +5,17 @@ import { daysOverdue, nextWater, toISODate } from './schedule.js';
 
 const PLANT_FIELDS = [
   'name', 'species_id', 'room', 'light', 'light_level', 'location_note', 'acquired', 'soil', 'pot',
-  'toxic', 'water_interval_override', 'last_watered',
-  'next_water_override', 'last_fed', 'last_repotted',
+  'toxic', 'water_interval_override', 'last_watered', 'next_water_override', 'last_fed', 'last_repotted',
 ] as const;
 
 const SPECIES_FIELDS = [
-  'name', 'latin_name', 'name_nl', 'name_en', 'synonyms', 'water_summer_days', 'water_winter_days',
-  'feed_days', 'light_min', 'light_max', 'soil', 'toxic', 'feed_tip', 'repot_tip', 'prune_tip',
-  'description', 'source', 'external_id', 'gbif_key', 'toxic_pets', 'toxic_humans', 'extra',
+  'name', 'latin_name', 'name_nl', 'name_en', 'gbif_key', 'water_summer_days', 'water_winter_days',
+  'light_min', 'light_max', 'soil', 'toxic_pets', 'toxic_humans', 'feed_tip', 'repot_tip', 'prune_tip', 'description',
 ] as const;
+
+// Log types that also update a "last ..." date on the plant.
+const LAST_COLUMN: Record<string, string> = { water: 'last_watered', feed: 'last_fed', repot: 'last_repotted' };
+const DATE_FIELDS = new Set(['acquired', 'last_watered', 'next_water_override', 'last_fed', 'last_repotted']);
 
 function validate(data: Row): void {
   for (const f of ['light_level', 'light_min', 'light_max'])
@@ -21,7 +23,7 @@ function validate(data: Row): void {
       throw new HttpError(400, `${f} moet een van ${LIGHT_LEVELS.join(', ')} zijn`);
   if (data.soil != null && !(SOILS as readonly string[]).includes(data.soil))
     throw new HttpError(400, `soil moet een van ${SOILS.join(', ')} zijn`);
-  for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (f in data && data[f] != null) data[f] = data[f] ? 1 : 0;
+  for (const f of ['toxic', 'toxic_pets', 'toxic_humans']) if (data[f] != null) data[f] = data[f] ? 1 : 0;
 }
 
 const normalize = (t: string) =>
@@ -44,14 +46,14 @@ function checkText(v: unknown, field: string): void {
   if (typeof v === 'string' && v.length > MAX_TEXT) throw new HttpError(400, `${field} is te lang (max ${MAX_TEXT} tekens)`);
 }
 
-const pick = (src: Row, fields: readonly string[]) =>
+/** Copies the allowed fields from a request body, validating text length and dates; '' becomes null. */
+const pick = (src: Row, fields: readonly string[]): Row =>
   Object.fromEntries(
     fields
       .filter((f) => f in src)
       .map((f) => {
         checkText(src[f], f);
-        const date = /^(acquired|last_watered|next_water_override|last_fed|last_repotted)$/.test(f);
-        if (date && src[f] && !ISO_DATE.test(String(src[f]))) throw new HttpError(400, `${f} moet YYYY-MM-DD zijn`);
+        if (DATE_FIELDS.has(f) && src[f] && !ISO_DATE.test(String(src[f]))) throw new HttpError(400, `${f} moet YYYY-MM-DD zijn`);
         return [f, src[f] === '' ? null : src[f]];
       }),
   );
@@ -83,12 +85,15 @@ export class PlantService {
       },
       today,
     );
+    // A toxicity set on the plant itself overrides the species for both groups.
+    const pets = r.toxic ?? r.species_toxic_pets ?? 0;
+    const humans = r.toxic ?? r.species_toxic_humans ?? 0;
     return {
       ...r,
       toxic_own: r.toxic,
-      toxic_pets: r.toxic ?? r.species_toxic_pets ?? r.species_toxic ?? 0,
-      toxic_humans: r.toxic ?? r.species_toxic_humans ?? r.species_toxic ?? 0,
-      toxic: r.toxic ?? (r.species_toxic_pets || r.species_toxic_humans || r.species_toxic ? 1 : 0),
+      toxic_pets: pets,
+      toxic_humans: humans,
+      toxic: pets || humans ? 1 : 0,
       soil_effective: r.soil ?? r.species_soil ?? null,
       light_status: lightStatus(r.light_level, r.light_min, r.light_max),
       next_water: next,
@@ -97,9 +102,22 @@ export class PlantService {
   }
 
   private plantSelect = `SELECT p.*, s.name AS species_name, s.latin_name, s.name_nl, s.name_en,
-    s.water_summer_days, s.water_winter_days, s.feed_days, s.light_min, s.light_max,
-    s.toxic AS species_toxic, s.toxic_pets AS species_toxic_pets, s.toxic_humans AS species_toxic_humans, s.soil AS species_soil
+    s.water_summer_days, s.water_winter_days, s.light_min, s.light_max,
+    s.toxic_pets AS species_toxic_pets, s.toxic_humans AS species_toxic_humans, s.soil AS species_soil
     FROM plants p LEFT JOIN species s ON s.id = p.species_id`;
+
+  private insert(table: string, data: Row): number {
+    const cols = Object.keys(data);
+    const sql = cols.length
+      ? `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+      : `INSERT INTO ${table} DEFAULT VALUES`;
+    return Number(this.db.prepare(sql).run(...Object.values(data)).lastInsertRowid);
+  }
+
+  private update(table: string, id: number, data: Row): void {
+    const cols = Object.keys(data);
+    if (cols.length) this.db.prepare(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(',')} WHERE id = ?`).run(...Object.values(data), id);
+  }
 
   listPlants(): Row[] {
     const rows = this.db.prepare(`${this.plantSelect} WHERE p.archived = 0 ORDER BY p.name`).all();
@@ -117,24 +135,15 @@ export class PlantService {
     if (!body.name) throw new HttpError(400, 'name is verplicht');
     const data = pick(body, PLANT_FIELDS);
     validate(data);
-    const cols = Object.keys(data);
-    const res = this.db
-      .prepare(`INSERT INTO plants (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
-      .run(...(Object.values(data) as any[]));
-    return this.getPlant(Number(res.lastInsertRowid));
+    return this.getPlant(this.insert('plants', data));
   }
 
   updatePlant(id: number, body: Row): Row {
     this.getPlant(id);
     const data = pick(body, PLANT_FIELDS);
     validate(data);
-    if ('archived' in body) (data as Row).archived = body.archived ? 1 : 0;
-    const cols = Object.keys(data);
-    if (cols.length) {
-      this.db
-        .prepare(`UPDATE plants SET ${cols.map((c) => `${c} = ?`).join(',')} WHERE id = ?`)
-        .run(...(Object.values(data) as any[]), id);
-    }
+    if ('archived' in body) data.archived = body.archived ? 1 : 0;
+    this.update('plants', id, data);
     return this.getPlant(id);
   }
 
@@ -150,26 +159,14 @@ export class PlantService {
 
   upsertSpecies(body: Row, id?: number): Row {
     if (!id && !body.name) throw new HttpError(400, 'name is verplicht');
-    const data = pick(body, SPECIES_FIELDS) as Row;
+    const data = pick(body, SPECIES_FIELDS);
     validate(data);
     if (id) {
       this.getSpecies(id);
-      const cols = Object.keys(data);
-      // Marks the entry as customised by the user.
-      uniqueGuard(() =>
-        this.db
-          .prepare(`UPDATE species SET ${[...cols.map((c) => `${c} = ?`), 'user_edited = 1'].join(',')} WHERE id = ?`)
-          .run(...(Object.values(data) as any[]), id),
-      );
+      uniqueGuard(() => this.update('species', id, data));
       return this.getSpecies(id);
     }
-    const cols = Object.keys(data);
-    const res = uniqueGuard(() =>
-      this.db
-        .prepare(`INSERT INTO species (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`)
-        .run(...(Object.values(data) as any[])),
-    );
-    return this.getSpecies(Number(res.lastInsertRowid));
+    return this.getSpecies(uniqueGuard(() => this.insert('species', data)));
   }
 
   /** Returns the stored species for a chosen name, or creates one with only the names filled in. */
@@ -182,7 +179,7 @@ export class PlantService {
     if (found) return { species: found, created: false };
     const nl = choice.name_nl || null;
     const en = choice.name_en || null;
-    const base = { latin_name: latin, name_nl: nl, name_en: en, gbif_key: gbif, source: 'gbif' };
+    const base = { latin_name: latin, name_nl: nl, name_en: en, gbif_key: gbif };
     try {
       return { species: this.upsertSpecies({ ...base, name: nl || en || latin }), created: true };
     } catch (e) {
@@ -197,7 +194,7 @@ export class PlantService {
     if (!tokens.length || normalize(q).length < 2) return [];
     const scored: { score: number; row: Row }[] = [];
     for (const row of this.listSpecies()) {
-      const fields = [row.name, row.latin_name, row.name_nl, row.name_en, ...String(row.synonyms ?? '').split(',')]
+      const fields = [row.name, row.latin_name, row.name_nl, row.name_en]
         .filter(Boolean)
         .map((f) => normalize(String(f)));
       let total = 0;
@@ -215,7 +212,6 @@ export class PlantService {
     scored.sort((a, b) => a.score - b.score || a.row.id - b.row.id);
     return scored.slice(0, limit).map(({ row }) => ({
       id: row.id, name: row.name, latin_name: row.latin_name, name_nl: row.name_nl, name_en: row.name_en,
-      source: row.source,
     }));
   }
 
@@ -233,13 +229,10 @@ export class PlantService {
     this.db
       .prepare('INSERT INTO logs (plant_id, type, date, note, outcome, photo) VALUES (?,?,?,?,?,?)')
       .run(plantId, type, date, body.note ?? null, body.outcome ?? null, body.photo ?? null);
-    const column = { water: 'last_watered', feed: 'last_fed', repot: 'last_repotted' }[type as string];
-    if (column) {
-      // Back-dated entries must not move the "last" date backwards.
-      this.db
-        .prepare(`UPDATE plants SET ${column} = ? WHERE id = ? AND (${column} IS NULL OR ${column} < ?)`)
-        .run(date, plantId, date);
-    }
+    const column = LAST_COLUMN[type];
+    // Back-dated entries must not move the "last" date backwards.
+    if (column)
+      this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ? AND (${column} IS NULL OR ${column} < ?)`).run(date, plantId, date);
     return this.getPlant(plantId);
   }
 
@@ -249,7 +242,7 @@ export class PlantService {
   }
 
   private syncLast(plantId: number, type: string): void {
-    const column = { water: 'last_watered', feed: 'last_fed', repot: 'last_repotted' }[type];
+    const column = LAST_COLUMN[type];
     if (!column) return;
     const m = this.db.prepare('SELECT MAX(date) AS d FROM logs WHERE plant_id = ? AND type = ?').get(plantId, type) as Row;
     if (m.d) this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ?`).run(m.d, plantId);

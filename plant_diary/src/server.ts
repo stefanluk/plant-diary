@@ -10,7 +10,6 @@ import { openDb } from './db.js';
 import { HttpError, PlantService } from './service.js';
 import { HaBridge } from './ha.js';
 import { NameSearch } from './names.js';
-import { LIGHT_LEVELS, SOILS } from './options.js';
 import { toISODate } from './schedule.js';
 
 const DATA_DIR = process.env.DATA_DIR ?? './data';
@@ -49,6 +48,20 @@ async function readHead(stream: NodeJS.ReadableStream, n: number): Promise<{ hea
     for (let r = await it.next(); !r.done; r = await it.next()) yield r.value;
   }
   return { head: head.subarray(0, n), rest: rest() };
+}
+
+/** Stores an uploaded image after checking its extension and file signature; returns the stored file name. */
+async function savePhoto(file: NodeJS.ReadableStream, filename: string): Promise<string> {
+  const ext = extname(filename).toLowerCase();
+  if (!PHOTO_EXT.has(ext)) throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
+  const { head, rest } = await readHead(file, 12);
+  if (!isImage(head)) {
+    file.resume();
+    throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
+  }
+  const name = `${randomUUID()}${ext}`;
+  await pipeline(rest, createWriteStream(join(PHOTO_DIR, name)));
+  return name;
 }
 
 export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, names = new NameSearch()) {
@@ -95,18 +108,8 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
     if (req.isMultipart()) {
       body = {};
       for await (const part of req.parts()) {
-        if (part.type === 'file') {
-          const ext = extname(part.filename).toLowerCase();
-          if (!PHOTO_EXT.has(ext)) throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
-          const name = `${randomUUID()}${ext}`;
-          const { head, rest } = await readHead(part.file, 12);
-          if (!isImage(head)) {
-            part.file.resume();
-            throw new HttpError(400, 'Alleen afbeeldingen toegestaan');
-          }
-          await pipeline(rest, createWriteStream(join(PHOTO_DIR, name)));
-          body.photo = name;
-        } else body[part.fieldname] = part.value;
+        if (part.type === 'file') body.photo = await savePhoto(part.file, part.filename);
+        else body[part.fieldname] = part.value;
       }
       if (body.photo && !body.type) body.type = 'photo';
     } else body = req.body as any;
@@ -119,9 +122,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
     return reply.code(204).send();
   });
 
-  app.get('/api/config', async () => ({ light_levels: LIGHT_LEVELS, soils: SOILS }));
   app.get('/api/species', async () => svc.listSpecies());
-  app.get('/api/species/search', async (req) => svc.searchSpecies(String((req.query as any).q ?? '')));
   app.get('/api/names/suggest', async (req) => {
     const q = String((req.query as any).q ?? '');
     const local = svc.searchSpecies(q);
@@ -139,7 +140,6 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
     const out = svc.resolveSpecies((req.body ?? {}) as any);
     return reply.code(out.created ? 201 : 200).send(out);
   });
-  app.get('/api/species/:id', async (req) => svc.getSpecies(id(req)));
   app.post('/api/species', async (req, reply) => reply.code(201).send(svc.upsertSpecies(req.body as any)));
   app.patch('/api/species/:id', async (req) => refresh(svc.upsertSpecies(req.body as any, id(req))));
   app.get('/api/due', async () => svc.dueToday());
