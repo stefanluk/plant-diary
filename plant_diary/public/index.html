@@ -125,13 +125,12 @@ function toxicBox(p) {
 }
 function infoBlock(p) {
   const s = p.species;
-  if (!s) return '<div class="card"><h3>Soort-info</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
+  if (!s) return '<div class="card"><h3>Plantverzorging</h3><p class="muted">Geen soort gekoppeld. Kies hieronder een soort.</p></div>';
   const tip = (label, v) => `<div><span class="muted">${label}</span><br>${v ? esc(v) : '<span class="muted">nog niet ingevuld</span>'}</div>`;
   const water = s.water_summer_days ? `elke ${s.water_summer_days} dagen (zomer) · ${s.water_winter_days ?? s.water_summer_days} dagen (winter)` : '';
   const mismatch = p.light_status === 'too_bright' || p.light_status === 'too_dark'
     ? `<div class="warnbox">${p.light_status === 'too_bright' ? '☀️ Staat te licht' : '🌑 Staat te donker'}: nu <strong>${LIGHT[p.light_level]}</strong>, ideaal <strong>${lightRange(s)}</strong>.</div>` : '';
-  return `<div class="card info"><div class="row"><h3>${esc(s.latin_name || s.name)}${s.name_nl ? ' · ' + esc(s.name_nl) : ''}</h3>
-      </div>
+  return `<div class="card info"><h3>Plantverzorging</h3>
     ${mismatch}${toxicBox(p)}
     ${s.description ? `<p>${esc(s.description)}</p>` : ''}
     <div class="grid">
@@ -142,7 +141,7 @@ function infoBlock(p) {
       ${tip('🪴 Verpotten', s.repot_tip)}
       ${tip('✂️ Snoeien', s.prune_tip)}
     </div>
-    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Bewerk soort</button></div></div>`;
+    <div class="actions" style="margin-top:12px"><button class="sec" id="editspecies">Plantverzorging aanpassen</button></div></div>`;
 }
 
 async function showPlant(id) {
@@ -160,6 +159,7 @@ async function showPlant(id) {
         <label>Soort</label><select name="species_id"><option value="">–</option>${opts}</select>
         <label>Waterinterval overschrijven (dagen, leeg = soort/seizoen)</label><input name="water_interval_override" type="number" min="1" value="${p.water_interval_override ?? ''}">
         <label>Volgende water handmatig (datum)</label><input name="next_water_override" type="date" value="${p.next_water_override ?? ''}">
+        <label>Standplaats (waar staat de plant nu?)</label><select name="light_level">${opt(LIGHT, p.light_level, '– kies –')}</select>
         <label>Kamer</label><input name="room" value="${esc(p.room)}">
         <label>Plek</label><input name="location_note" value="${esc(p.location_note)}">
         ${p.light ? `<label>Eerdere lichtnotitie</label><input name="light" value="${esc(p.light)}">` : ''}
@@ -172,22 +172,20 @@ async function showPlant(id) {
   $('#app').innerHTML = `
     <div class="cols"><div>
     <div class="card">
-      <div class="row"><span>Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</span></div>
+      <div class="row"><h3 style="margin:0">${esc(p.name)}</h3><button class="quiet" id="openedit">Bewerk</button></div>
       <div class="muted">${speciesLine(p)}</div>
-      <div class="muted" style="margin-top:8px">Laatst water: ${fmt(p.last_watered)}<br>Voeding: ${fmt(p.last_fed)}<br>Verpot: ${fmt(p.last_repotted)}</div>
+      <div style="margin-top:8px">Volgende water: <strong>${fmt(p.next_water)}</strong> ${statusBadge(p, false)}</div>
+      ${[['Laatst water', p.last_watered], ['Voeding', p.last_fed], ['Verpot', p.last_repotted]].filter(([, d]) => d)
+        .map(([l, d]) => `<div class="muted">${l}: ${fmt(d)}</div>`).join('')}
+      ${p.light_level ? `<div class="muted">Standplaats: ${LIGHT[p.light_level]}</div>` : ''}
       <div class="muted">${lightBadge(p)}${toxic(p)}</div>
-      <label style="margin-top:10px;display:block">Standplaats (waar staat de plant nu?)</label>
-      <select id="lightlevel">${opt(LIGHT, p.light_level, '– kies –')}</select>
     </div>
-    <div class="actions" style="margin-bottom:12px"><button id="openlog">✍️ Schrijf update</button><button class="quiet" id="openedit">Schema bewerken</button></div>
     </div><div>${infoBlock(p)}</div></div>
-    <h3>Dagboek</h3>
+    <div class="row" style="margin-top:16px"><h3 style="margin:0">Dagboek</h3><button id="openlog">Schrijf update</button></div>
+    <div style="height:10px"></div>
     ${p.logs.map((l) => `<div class="card log"><div class="row"><strong>${TYPES[l.type]}</strong><span class="muted">${fmt(l.date)}</span></div>
       ${l.note ? `<div>${esc(l.note)}</div>` : ''}${l.photo ? `<img class="photo" src="photos/${esc(l.photo)}">` : ''}
       <div style="text-align:right"><button type="button" class="quiet" data-editlog="${l.id}">bewerken</button></div></div>`).join('') || '<p class="muted">Nog geen berichten.</p>'}`;
-  $('#lightlevel').onchange = async (e) => {
-    await api('plants/' + id, { method:'PATCH', body:{ light_level: e.target.value || null } }).catch((x) => toast(x.message)); showPlant(id);
-  };
   if ($('#editspecies')) $('#editspecies').onclick = () => editSpecies(p);
   $('#openlog').onclick = () => {
     const d = modal('Update schrijven', logForm());
