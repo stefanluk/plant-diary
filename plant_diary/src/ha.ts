@@ -18,7 +18,6 @@ export interface HaConfig {
 export class HaBridge {
   private mqtt?: MqttClient;
   private ws?: WebSocket;
-  private notifiedOn = new Map<number, string>();
 
   constructor(private cfg: HaConfig, private svc: PlantService, private log = console) {}
 
@@ -110,27 +109,26 @@ export class HaBridge {
     pub(`${PREFIX}/due`, { count: due.length, plants: due.map((p) => p.name) });
   }
 
-  /** Send one push per plant per day for plants that are due. */
+  /** Sends one summary push per day listing the plants that need water. */
   async notifyDue(today: string): Promise<void> {
     if (!this.cfg.notifyService || !this.cfg.supervisorToken || !this.cfg.haUrl) return;
     if (!/^[a-z_]+\.[a-z0-9_]+$/.test(this.cfg.notifyService)) return this.log.error('Ongeldige notify_service');
+    if (this.svc.getMeta('notified_on') === today) return;
+    const due = this.svc.dueToday();
+    if (!due.length) return;
+    this.svc.setMeta('notified_on', today);
     const [domain, service] = this.cfg.notifyService.split('.');
-    for (const p of this.svc.dueToday()) {
-      if (this.notifiedOn.get(p.id) === today) continue;
-      this.notifiedOn.set(p.id, today);
-      await fetch(`${this.cfg.haUrl}/services/${domain}/${service}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.cfg.supervisorToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `${p.name} heeft water nodig`,
-          message: p.room ? `Locatie: ${p.room}` : 'Tijd om water te geven',
-          data: {
-            tag: `${PREFIX}_${p.id}`,
-            actions: [{ action: `PLANT_WATER_${p.id}`, title: 'Water gegeven' }],
-          },
-        }),
-      }).catch((e) => this.log.error('notify failed', e.message));
-    }
+    const names = due.map((p) => p.name);
+    const shown = names.length > 8 ? [...names.slice(0, 8), `en ${names.length - 8} meer`] : names;
+    await fetch(`${this.cfg.haUrl}/services/${domain}/${service}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.cfg.supervisorToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: due.length === 1 ? '1 plant heeft water nodig' : `${due.length} planten hebben water nodig`,
+        message: shown.join(', '),
+        data: { tag: `${PREFIX}_due` },
+      }),
+    }).catch((e) => this.log.error('notify failed', e.message));
   }
 
   private connectWs(): void {

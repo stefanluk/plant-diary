@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { LOG_TYPES, OUTCOMES, type Row } from './db.js';
+import { LOG_TYPES, OUTCOMES, columnsOf, type Row } from './db.js';
 import { LIGHT_LEVELS, SOILS, lightStatus } from './options.js';
 import { daysOverdue, nextWater, toISODate } from './schedule.js';
 
@@ -45,7 +45,7 @@ function uniqueGuard<T>(fn: () => T): T {
 
 const MAX_TEXT = 2000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const PHOTO_NAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|heic)$/;
+export const PHOTO_NAME = /^[0-9a-f-]{36}\.(jpe?g|png|webp|heic)$/;
 
 function checkText(v: unknown, field: string): void {
   if (typeof v === 'string' && v.length > MAX_TEXT) throw new HttpError(400, `${field} is te lang (max ${MAX_TEXT} tekens)`);
@@ -67,6 +67,8 @@ function checkLog(body: Row): void {
   checkText(body.note, 'note');
   if (body.date && !ISO_DATE.test(String(body.date))) throw new HttpError(400, 'date moet YYYY-MM-DD zijn');
 }
+
+export const BACKUP_FORMAT = 'plantendagboek-backup';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -230,14 +232,24 @@ export class PlantService {
     if (!LOG_TYPES.includes(type)) throw new HttpError(400, `type moet een van ${LOG_TYPES.join(', ')} zijn`);
     if (body.outcome && !OUTCOMES.includes(body.outcome)) throw new HttpError(400, 'outcome moet good of bad zijn');
     const date: string = body.date || toISODate(this.now());
-    this.db
-      .prepare('INSERT INTO logs (plant_id, type, date, note, outcome) VALUES (?,?,?,?,?)')
-      .run(plantId, type, date, body.note ?? null, body.outcome ?? null);
+    const logId = Number(
+      this.db
+        .prepare('INSERT INTO logs (plant_id, type, date, note, outcome) VALUES (?,?,?,?,?)')
+        .run(plantId, type, date, body.note ?? null, body.outcome ?? null).lastInsertRowid,
+    );
     const column = LAST_COLUMN[type];
     // Back-dated entries must not move the "last" date backwards.
     if (column)
       this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ? AND (${column} IS NULL OR ${column} < ?)`).run(date, plantId, date);
-    return this.getPlant(plantId);
+    return { ...this.getPlant(plantId), log_id: logId };
+  }
+
+  /** Copies a plant (e.g. a cutting) without its photo, dates and diary. */
+  duplicatePlant(id: number): Row {
+    const src = this.getPlant(id);
+    const copy: Row = { name: `${src.name} (stek)`, acquired: toISODate(this.now()) };
+    for (const f of ['species_id', 'room', 'location_note', 'light_level', 'soil', 'toxic']) if (src[f] != null) copy[f] = src[f];
+    return this.createPlant(copy);
   }
 
   /** Sets (or clears, with null) the plant's photo; returns the previous file name so the caller can delete it. */
@@ -258,11 +270,52 @@ export class PlantService {
     this.db.exec("DELETE FROM logs; DELETE FROM plants; DELETE FROM species; DELETE FROM sqlite_sequence WHERE name IN ('logs','plants','species')");
   }
 
+  /** All plants, species and diary entries as plain rows, for backups. */
+  exportData(): Row {
+    const all = (t: string) => this.db.prepare(`SELECT * FROM ${t} ORDER BY id`).all();
+    return { format: BACKUP_FORMAT, version: 1, exported_at: new Date().toISOString(), species: all('species'), plants: all('plants'), logs: all('logs') };
+  }
+
+  /** Replaces everything with a backup. Photos not in `photos` are dropped from the plants. All or nothing. */
+  importData(data: Row, photos: ReadonlySet<string>): { plants: number } {
+    if (data?.format !== BACKUP_FORMAT || data.version !== 1 || !['species', 'plants', 'logs'].every((k) => Array.isArray(data[k])))
+      throw new HttpError(400, 'Dit is geen geldige back-up van Plantendagboek');
+    const insert = (table: string, rows: Row[]) => {
+      const allowed = columnsOf(this.db, table);
+      for (const row of rows) {
+        const cols = Object.keys(row).filter((c) => allowed.has(c));
+        const vals = cols.map((c) => (['string', 'number'].includes(typeof row[c]) ? row[c] : null));
+        this.db.prepare(`INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`).run(...vals);
+      }
+    };
+    const plants = (data.plants as Row[]).map((p) => ({ ...p, photo: photos.has(p.photo) ? p.photo : null }));
+    this.db.exec('BEGIN');
+    try {
+      this.resetAll();
+      insert('species', data.species);
+      insert('plants', plants);
+      insert('logs', data.logs);
+      this.db.exec('COMMIT');
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e instanceof HttpError ? e : new HttpError(400, 'Back-up kon niet worden ingelezen');
+    }
+    return { plants: plants.length };
+  }
+
+  getMeta(key: string): string | null {
+    return (this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as Row | undefined)?.value ?? null;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+  }
+
   private syncLast(plantId: number, type: string): void {
     const column = LAST_COLUMN[type];
     if (!column) return;
     const m = this.db.prepare('SELECT MAX(date) AS d FROM logs WHERE plant_id = ? AND type = ?').get(plantId, type) as Row;
-    if (m.d) this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ?`).run(m.d, plantId);
+    this.db.prepare(`UPDATE plants SET ${column} = ? WHERE id = ?`).run(m.d ?? null, plantId);
   }
 
   updateLog(plantId: number, logId: number, body: Row): Row {

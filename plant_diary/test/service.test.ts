@@ -1,8 +1,14 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
+
+// Must be set before the server module is loaded: photo routes write below DATA_DIR.
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'pd-test-'));
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { PlantService } from '../src/service.js';
-import { nextWater, seasonOf } from '../src/schedule.js';
+import { daysOverdue, nextWater, seasonOf } from '../src/schedule.js';
 
 const base = { lastWatered: null, nextOverride: null, intervalOverrideDays: null, speciesSummerDays: 10, speciesWinterDays: 20 };
 
@@ -129,4 +135,116 @@ test('pot must be a diameter in cm', () => {
   const svc = new PlantService(openDb(':memory:'));
   assert.equal(svc.createPlant({ name: 'A', pot: '14,5' }).pot, '14.5');
   assert.throws(() => svc.createPlant({ name: 'B', pot: 'terracotta' }), /diameter/);
+});
+
+test('season boundaries and overdue days', () => {
+  assert.equal(seasonOf(new Date(2026, 2, 31)), 'winter');
+  assert.equal(seasonOf(new Date(2026, 3, 1)), 'summer');
+  assert.equal(seasonOf(new Date(2026, 8, 30)), 'summer');
+  assert.equal(seasonOf(new Date(2026, 9, 1)), 'winter');
+  assert.equal(daysOverdue('2026-07-10', new Date(2026, 6, 13)), 3);
+  assert.equal(daysOverdue('2026-07-10', new Date(2026, 6, 10)), 0);
+  assert.equal(daysOverdue('2026-07-10', new Date(2026, 6, 8)), -2);
+  assert.equal(daysOverdue(null, new Date()), null);
+});
+
+test('undoing a watering restores the previous last-watered date', () => {
+  const svc = new PlantService(openDb(':memory:'), () => new Date(2026, 6, 15));
+  const id = Number(svc.createPlant({ name: 'A' }).id);
+  const first = svc.addLog(id, { type: 'water', date: '2026-07-01' });
+  const second = svc.addLog(id, { type: 'water' });
+  assert.equal(second.last_watered, '2026-07-15');
+  svc.deleteLog(id, Number(second.log_id));
+  assert.equal(svc.getPlant(id).last_watered, '2026-07-01');
+  svc.deleteLog(id, Number(first.log_id));
+  assert.equal(svc.getPlant(id).last_watered, null);
+});
+
+test('duplicating a plant keeps species and place but not photo, dates or diary', () => {
+  const svc = new PlantService(openDb(':memory:'), () => new Date(2026, 6, 15));
+  const sp = svc.upsertSpecies({ name: 'Pilea' });
+  const src = svc.createPlant({ name: 'Pilea', species_id: sp.id, room: 'Keuken', light_level: 'indirect', pot: '12' });
+  svc.addLog(Number(src.id), { type: 'water' });
+  svc.setPhoto(Number(src.id), '11111111-2222-3333-4444-555555555555.jpg');
+  const copy = svc.duplicatePlant(Number(src.id));
+  assert.equal(copy.name, 'Pilea (stek)');
+  assert.equal(copy.species_id, sp.id);
+  assert.equal(copy.room, 'Keuken');
+  assert.equal(copy.acquired, '2026-07-15');
+  assert.equal(copy.photo, null);
+  assert.equal(copy.last_watered, null);
+  assert.equal(copy.pot, null);
+  assert.equal((copy.logs as unknown[]).length, 0);
+});
+
+test('backup export can be imported again; invalid backups change nothing', () => {
+  const svc = new PlantService(openDb(':memory:'));
+  const sp = svc.upsertSpecies({ name: 'Monstera', water_summer_days: 7 });
+  const p = svc.createPlant({ name: 'Mo', species_id: sp.id });
+  svc.addLog(Number(p.id), { type: 'note', note: 'hoi' });
+  const photo = '11111111-2222-3333-4444-555555555555.jpg';
+  svc.setPhoto(Number(p.id), photo);
+  const backup = JSON.parse(JSON.stringify(svc.exportData()));
+
+  const other = new PlantService(openDb(':memory:'));
+  other.createPlant({ name: 'Oud' });
+  assert.deepEqual(other.importData(backup, new Set([photo])), { plants: 1 });
+  const got = other.getPlant(Number(p.id));
+  assert.equal(got.name, 'Mo');
+  assert.equal(got.photo, photo);
+  assert.equal((got.logs as any[])[0].note, 'hoi');
+  assert.equal(other.listPlants().length, 1);
+
+  other.importData(backup, new Set());
+  assert.equal(other.getPlant(Number(p.id)).photo, null);
+
+  assert.throws(() => other.importData({ format: 'nope' }, new Set()), /geen geldige back-up/);
+  assert.throws(() => other.importData({ ...backup, plants: [{ id: 1, name: 'A' }, { id: 1, name: 'B' }] }, new Set()), /kon niet/);
+  assert.equal(other.listPlants().length, 1);
+});
+
+test('export and import routes round-trip photos', async () => {
+  const { buildApp } = await import('../src/server.js');
+  const svc = new PlantService(openDb(':memory:'));
+  const app = buildApp(svc);
+  const photo = '11111111-2222-3333-4444-555555555555.jpg';
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20)]);
+  const p = svc.createPlant({ name: 'A' });
+  svc.setPhoto(Number(p.id), photo);
+  const bad = await app.inject({ method: 'POST', url: '/api/import', payload: { format: 'x' } });
+  assert.equal(bad.statusCode, 400);
+  const res = await app.inject({
+    method: 'POST', url: '/api/import',
+    payload: { ...svc.exportData(), photos: { [photo]: jpeg.toString('base64'), '../evil.jpg': 'AAAA' } },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(svc.getPlant(Number(p.id)).photo, photo);
+  const out = await app.inject({ url: '/api/export' });
+  assert.match(String(out.headers['content-disposition']), /attachment/);
+  assert.equal(Object.keys(out.json().photos).join(), photo);
+  const dup = await app.inject({ method: 'POST', url: `/api/plants/${p.id}/duplicate` });
+  assert.equal(dup.statusCode, 201);
+  await app.close();
+});
+
+test('daily summary sends one push for all due plants, once a day', async () => {
+  const { HaBridge } = await import('../src/ha.js');
+  const svc = new PlantService(openDb(':memory:'), () => new Date(2026, 6, 15));
+  const sp = svc.upsertSpecies({ name: 'S', water_summer_days: 3 });
+  for (const n of ['A', 'B']) svc.addLog(Number(svc.createPlant({ name: n, species_id: sp.id }).id), { type: 'water', date: '2026-07-01' });
+  const calls: any[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_u: string, init: any) => (calls.push(JSON.parse(init.body)), { ok: true })) as any;
+  try {
+    const ha = new HaBridge({ notifyService: 'notify.phone', supervisorToken: 't', haUrl: 'http://x' }, svc, { error() {} } as any);
+    await ha.notifyDue('2026-07-15');
+    await ha.notifyDue('2026-07-15');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].title, '2 planten hebben water nodig');
+    assert.equal(calls[0].message, 'A, B');
+    await ha.notifyDue('2026-07-16');
+    assert.equal(calls.length, 2);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

@@ -15,12 +15,12 @@ Environment variables (the add-on's `run.sh` sets these from the add-on options)
 ## Layout
 
 - `plant_diary/src` – Fastify server (`server.ts`), business logic (`service.ts`), SQLite schema/migrations (`db.ts`), name search via GBIF/Wikidata (`names.ts`), MQTT/notification bridge (`ha.ts`).
-- `plant_diary/public/index.html` – single-file vanilla JS UI.
+- `plant_diary/public/` – vanilla JS UI: `index.html`, `style.css` and ES modules in `js/` (no build step).
 - `plant_diary/config.yaml` – add-on manifest; bump `version` to ship an update.
 
 ## API
 
-`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST/DELETE /api/plants/:id/photo` (multipart `photo`, one per plant), `POST /api/plants/:id/logs`, `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST /api/species`, `PATCH /api/species/:id`, `GET /api/names/suggest?q=` (local + GBIF/Wikidata), `POST /api/species/resolve` (returns the stored species or creates a name-only one), `GET /api/due`.
+`GET/POST /api/plants`, `GET/PATCH/DELETE /api/plants/:id`, `POST/DELETE /api/plants/:id/photo` (multipart `photo`, one per plant), `POST /api/plants/:id/logs`, `PATCH/DELETE /api/plants/:id/logs/:logId`, `GET/POST /api/species`, `PATCH /api/species/:id`, `GET /api/names/suggest?q=` (local + GBIF/Wikidata), `POST /api/species/resolve` (returns the stored species or creates a name-only one), `POST /api/plants/:id/duplicate` (copy without photo/diary), `GET /api/export` (JSON backup incl. photos), `POST /api/import` (replaces all data; 300 MB limit), `GET /api/due`.
 
 ## Guidelines
 

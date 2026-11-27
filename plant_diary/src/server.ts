@@ -1,13 +1,13 @@
 import Fastify from 'fastify';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { createWriteStream, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openDb } from './db.js';
-import { HttpError, PlantService } from './service.js';
+import { openDb, type Row } from './db.js';
+import { HttpError, PHOTO_NAME, PlantService } from './service.js';
 import { HaBridge } from './ha.js';
 import { NameSearch } from './names.js';
 import { toISODate } from './schedule.js';
@@ -76,7 +76,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header(
       'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'",
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'self'",
     );
   });
   mkdirSync(PHOTO_DIR, { recursive: true });
@@ -95,6 +95,7 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
   app.get('/api/plants', async () => svc.listPlants());
   app.post('/api/plants', async (req, reply) => reply.code(201).send(refresh(svc.createPlant(req.body as any))));
   app.get('/api/plants/:id', async (req) => svc.getPlant(id(req)));
+  app.post('/api/plants/:id/duplicate', async (req, reply) => reply.code(201).send(refresh(svc.duplicatePlant(id(req)))));
   app.patch('/api/plants/:id', async (req) => refresh(svc.updatePlant(id(req), req.body as any)));
 
   const removePhotoFile = (name: string | null) => name && rmSync(join(PHOTO_DIR, name), { force: true });
@@ -151,6 +152,34 @@ export function buildApp(svc: PlantService, ha?: HaBridge, ingressOnly = false, 
     for (const f of readdirSync(PHOTO_DIR)) rmSync(join(PHOTO_DIR, f), { force: true });
     for (const pid of ids) ha?.removePlant(pid);
     return reply.code(204).send();
+  });
+  app.get('/api/export', async (_req, reply) => {
+    const data = svc.exportData();
+    const photos: Record<string, string> = {};
+    for (const p of data.plants as Row[]) {
+      const file = join(PHOTO_DIR, String(p.photo));
+      if (p.photo && PHOTO_NAME.test(p.photo) && existsSync(file)) photos[p.photo] = readFileSync(file).toString('base64');
+    }
+    return reply
+      .header('Content-Disposition', `attachment; filename="plantendagboek-${toISODate(new Date())}.json"`)
+      .type('application/json')
+      .send(JSON.stringify({ ...data, photos }));
+  });
+  app.post('/api/import', { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+    const body = (req.body ?? {}) as Row;
+    const files = new Map<string, Buffer>();
+    for (const [name, b64] of Object.entries((body.photos ?? {}) as Record<string, unknown>)) {
+      const buf = typeof b64 === 'string' ? Buffer.from(b64, 'base64') : null;
+      if (buf && PHOTO_NAME.test(name) && isImage(buf.subarray(0, 12))) files.set(name, buf);
+    }
+    const before = svc.listPlants().map((p) => p.id);
+    const out = svc.importData(body, new Set(files.keys()));
+    for (const f of readdirSync(PHOTO_DIR)) rmSync(join(PHOTO_DIR, f), { force: true });
+    for (const [name, buf] of files) writeFileSync(join(PHOTO_DIR, name), buf);
+    const now = new Set(svc.listPlants().map((p) => p.id));
+    for (const pid of before) if (!now.has(pid)) ha?.removePlant(pid);
+    ha?.publish();
+    return reply.send(out);
   });
   app.get('/api/due', async () => svc.dueToday());
   return app;

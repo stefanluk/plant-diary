@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS logs (
   outcome TEXT
 );
 CREATE INDEX IF NOT EXISTS logs_plant ON logs(plant_id, date);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 `;
 
 const SPECIES_COLUMNS: Record<string, string> = {
@@ -63,7 +64,7 @@ const PLANT_COLUMNS: Record<string, string> = {
   archived: 'INTEGER NOT NULL DEFAULT 0',
 };
 
-function columnsOf(db: DatabaseSync, table: string): Set<string> {
+export function columnsOf(db: DatabaseSync, table: string): Set<string> {
   return new Set((db.prepare(`PRAGMA table_info(${table})`).all() as Row[]).map((r) => r.name));
 }
 

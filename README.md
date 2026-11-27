@@ -11,7 +11,7 @@ A Home Assistant add-on to keep track of your houseplants: a watering schedule p
 - Fixed light levels (full shade, half shade, indirect light, full sun) and soil types; a warning when a plant stands outside its species' light range.
 - Diary entries with date and note; entries can be edited or deleted.
 - Care data (watering days, light range, soil, toxicity, tips) is entered once per species via "Bewerk soort" and then reused by every plant of that species. No paid or keyed API is needed.
-- Push reminders with a **Water given** action, and sensors/buttons through MQTT discovery.
+- One daily summary push ("3 plants need water"), water on another date with undo, duplicate a plant (cutting), JSON backup/restore, and sensors/buttons through MQTT discovery.
 - Runs only behind Home Assistant ingress (sidebar panel); no extra port is exposed.
 
 ## Installation
